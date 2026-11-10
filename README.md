@@ -111,6 +111,45 @@ Run the app as usual:
 cd backend && ./start.sh            # http://localhost:8000
 ```
 
+## Deploy to Fly.io
+
+The repository ships a `fly.toml` that runs the app from its `Dockerfile` on a
+single machine with a 1 GB volume mounted at `/app/data`, so the SQLite database
+and uploads survive restarts and redeploys.
+
+```bash
+curl -L https://fly.io/install.sh | sh   # install flyctl, then reopen the shell
+fly auth signup                          # or: fly auth login
+
+# App names are globally unique: if `study-companion` is taken, create another
+# name and put that same name on the `app` line of fly.toml.
+fly apps create study-companion
+fly volumes create study_data --size 1 --region jnb
+
+fly secrets set JWT_SECRET="$(openssl rand -hex 32)"
+# Optional: switch the coach from the rules engine to the AI provider.
+# fly secrets set ANTHROPIC_API_KEY=sk-ant-...
+
+fly deploy
+```
+
+The first `fly deploy` builds the image (installing tesseract and the Python
+dependencies), and prints the app's permanent `https://<name>.fly.dev` URL.
+
+**Cost.** Fly has no free tier, but a personal organization's monthly bill under
+$5 is waived, so this stays at $0 as long as usage stays small. The config stops
+the machine when idle and wakes it on the next request, which keeps usage well
+under the threshold; a 1 GB volume is $0.15/month of provisioned storage. A card
+must be on file for the waiver to apply, and a bill of $5 or more is charged in
+full with no partial credit.
+
+**If uploads fail with `permission denied`,** Fly normally sets the volume's
+ownership to the image's `appuser`, but you can fix it by hand once:
+
+```bash
+fly ssh console -C "chown -R appuser:appuser /app/data"
+```
+
 ## Demo in 30 seconds
 
 1. **New course** → e.g. "Cell Biology", exam date in a few weeks.

@@ -1,0 +1,40 @@
+# Fly.io deployment: one small machine plus a volume that holds the SQLite
+# database and uploaded course material, so data survives restarts and redeploys.
+#
+# Change `app` if the name is taken; Fly app names are globally unique.
+app = "study-companion"
+primary_region = "jnb"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATA_DIR = "/app/data"
+  ENVIRONMENT = "production"
+  DEBUG = "false"
+
+# The persistent volume. Everything the app writes lives under DATA_DIR.
+[[mounts]]
+  source = "study_data"
+  destination = "/app/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  # Stop the machine when idle and wake it on the next request. This is what
+  # keeps the monthly bill far below Fly's $5 waiver threshold.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
