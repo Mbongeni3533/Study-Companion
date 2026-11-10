@@ -137,6 +137,38 @@ Run the app as usual:
 cd backend && ./start.sh            # http://localhost:8000
 ```
 
+## Platform support
+
+Study Companion is a web app with a single responsive client, so the same build runs everywhere. It can be **installed** on every listed platform as a Progressive Web App (PWA) from the browser, and run **on-premise** with Docker.
+
+| Platform | How to use |
+| --- | --- |
+| SaaS / Web | Open the hosted URL in any modern browser. |
+| Windows (installed) | Install from Chrome/Edge: menu → *Install Study Companion*. Runs as a standalone window. |
+| macOS (installed) | Install from Chrome/Safari/Edge. Safari: Share → *Add to Dock*. |
+| Linux (installed) | Install from Chrome/Edge/Firefox. |
+| iPhone (app) | Safari → Share → *Add to Home Screen*. Opens full-screen. |
+| iPad (app) | Safari → Share → *Add to Home Screen*. |
+| Android (app) | Chrome → menu → *Install app* / *Add to Home screen*. |
+| Chromebook | Install from Chrome, or run the Linux (Crostini) container below. |
+| On-premise | `docker compose up -d` (see *Deploy on-premise* below); data stays on your server. |
+
+The client is offline-aware: the app shell and static assets are cached by the service worker, so the UI loads even on a flaky connection (live data still needs the server).
+
+### Deploy on-premise
+
+```bash
+cp .env.example .env   # set JWT_SECRET, DATABASE_URL, ANTHROPIC_API_KEY, ...
+docker compose up -d   # http://localhost:8000
+```
+
+For a single machine without Compose, use the production image:
+
+```bash
+docker build -f Dockerfile.prod -t study-companion .
+docker run -d -p 8000:8000 -v study_data:/app/data --env-file .env study-companion
+```
+
 ## Deploy to Fly.io
 
 The repository ships a `fly.toml` that runs the app from its `Dockerfile` on a

@@ -133,6 +133,21 @@ if STATIC_DIR.exists():
     def favicon() -> FileResponse:
         return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
 
+    @app.get("/manifest.webmanifest", include_in_schema=False)
+    def manifest() -> FileResponse:
+        return FileResponse(
+            STATIC_DIR / "manifest.webmanifest",
+            media_type="application/manifest+json",
+        )
+
+    @app.get("/sw.js", include_in_schema=False)
+    def service_worker() -> FileResponse:
+        return FileResponse(
+            STATIC_DIR / "sw.js",
+            media_type="application/javascript",
+            headers={"Service-Worker-Allowed": "/"},
+        )
+
 
 @app.get("/health", response_model=HealthResponse, tags=["system"])
 def health(db: Session = Depends(get_db)) -> HealthResponse:

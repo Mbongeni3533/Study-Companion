@@ -7,6 +7,11 @@
   <meta name="description" content="Turn your lecture notes into a topic map, a study plan and a coach that won't spoon-feed answers." />
   <meta name="theme-color" content="#0b1020" />
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <link rel="stylesheet" href="/static/styles.css?v=__ASSET_VERSION__" />
   <link rel="stylesheet" href="/static/resources.css?v=__ASSET_VERSION__" />
   <link rel="stylesheet" href="/static/thesis-agent.css?v=__ASSET_VERSION__" />
@@ -144,5 +149,12 @@
   <script src="/static/toolbox.js?v=__ASSET_VERSION__"></script>
   <script src="/static/assessment.js?v=__ASSET_VERSION__"></script>
   <script src="/static/app.js?v=__ASSET_VERSION__"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>
