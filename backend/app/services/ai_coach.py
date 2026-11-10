@@ -99,6 +99,17 @@ class AIStudyCoach:
     def ai_available(self) -> bool:
         return self.provider is not None
 
+    @staticmethod
+    def _learner_line(learner: dict | None) -> str:
+        if not learner or not learner.get("assessed"):
+            return ""
+        note = learner.get("coach_note") or ""
+        label = learner.get("label") or ""
+        return (
+            f"Student thinking level: {label}. {note}\n"
+            "Adjust your language and scaffolding to match.\n"
+        )
+
     # ================================================================== chat
     async def reply(
         self,
@@ -110,6 +121,7 @@ class AIStudyCoach:
         history: Sequence[dict],
         message: str,
         hint_level: int = 1,
+        learner: dict | None = None,
     ) -> CoachAnswer:
         if self.provider is not None:
             answer = await self._ai_reply(
@@ -120,6 +132,7 @@ class AIStudyCoach:
                 history=history,
                 message=message,
                 hint_level=hint_level,
+                learner=learner,
             )
             if answer is not None:
                 return answer
@@ -130,6 +143,7 @@ class AIStudyCoach:
             excerpts=excerpts,
             message=message,
             hint_level=hint_level,
+            learner=learner,
         )
 
     async def _ai_reply(
@@ -142,6 +156,7 @@ class AIStudyCoach:
         history: Sequence[dict],
         message: str,
         hint_level: int,
+        learner: dict | None = None,
     ) -> CoachAnswer | None:
         topic_lines = "\n".join(f"- {t.title}" for t in topics[:12]) or "- (no topic map yet)"
         excerpt_lines = "\n\n".join(
@@ -158,7 +173,7 @@ Rules:
 - Ground every factual claim in the numbered excerpts. If they do not cover the question, say so and name what to upload.
 - Be warm and concise: under 220 words, short paragraphs, bullets where useful.
 - Never hand over an essay. Never invent sources.
-Topic map:
+{self._learner_line(learner)}Topic map:
 {topic_lines}
 
 Excerpts from the student's own material:
@@ -189,6 +204,7 @@ Excerpts from the student's own material:
         excerpts: Sequence[Excerpt],
         message: str,
         hint_level: int,
+        learner: dict | None = None,
     ) -> CoachAnswer:
         intent = self._detect_intent(message)
         topic = self._match_topic(message, topics) or (topics[0] if topics else None)
@@ -206,7 +222,11 @@ Excerpts from the student's own material:
             )
 
         if intent == "quiz":
-            return CoachAnswer(self._quiz_reply(topic, excerpts, hint_level), "rules", citations)
+            return CoachAnswer(
+                self._adapt(self._quiz_reply(topic, excerpts, hint_level, learner), learner, "quiz"),
+                "rules",
+                citations,
+            )
         if intent == "flashcards":
             return CoachAnswer(self._flashcard_reply(excerpts), "rules", citations)
         if intent == "summary":
@@ -215,9 +235,35 @@ Excerpts from the student's own material:
             return CoachAnswer(self._plan_reply(course_title, topics), "rules", [])
         if intent in {"explain", "hint"}:
             return CoachAnswer(
-                self._explain_reply(topic, excerpts, hint_level), "rules", citations
+                self._adapt(self._explain_reply(topic, excerpts, hint_level, learner), learner, "explain"),
+                "rules",
+                citations,
             )
-        return CoachAnswer(self._coach_reply(topic, topics, excerpts), "rules", citations)
+        return CoachAnswer(
+            self._adapt(self._coach_reply(topic, topics, excerpts), learner, "coach"),
+            "rules",
+            citations,
+        )
+
+    @staticmethod
+    def _adapt(text: str, learner: dict | None, kind: str) -> str:
+        if not learner or not learner.get("assessed"):
+            return text
+        level = learner.get("level")
+        prefixes = {
+            "foundation": {
+                "quiz": "Take your time. One question at a time is fine.\n\n",
+                "explain": "Let's go slowly, one small step at a time.\n\n",
+                "coach": "Let's go slowly, one step at a time.\n\n",
+            },
+            "stretch": {
+                "quiz": "Try without notes first.\n\n",
+                "explain": "Try to explain it first, then read on.\n\n",
+                "coach": "Try it yourself first, then ask for a hint.\n\n",
+            },
+        }
+        prefix = prefixes.get(level, {}).get(kind, "")
+        return prefix + text if prefix else text
 
     @staticmethod
     def _detect_intent(message: str) -> str:
@@ -263,6 +309,7 @@ Excerpts from the student's own material:
         topic: TopicBrief | None,
         excerpts: Sequence[Excerpt],
         hint_level: int,
+        learner: dict | None = None,
     ) -> str:
         heading = topic.title if topic else "this part of your material"
         excerpt = excerpts[0] if excerpts else None
@@ -307,8 +354,11 @@ Excerpts from the student's own material:
         topic: TopicBrief | None,
         excerpts: Sequence[Excerpt],
         hint_level: int,
+        learner: dict | None = None,
     ) -> str:
-        questions = self._build_quiz(excerpts, topic, count=3)
+        level = (learner or {}).get("level") if (learner or {}).get("assessed") else None
+        count = 4 if level == "stretch" else (2 if level == "foundation" else 3)
+        questions = self._build_quiz(excerpts, topic, count=count)
         if not questions:
             return (
                 "I need a bit more text before I can quiz you reliably. "

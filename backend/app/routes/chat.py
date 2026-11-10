@@ -16,7 +16,10 @@ from ..schemas import (
     ChatSessionResponse,
     MessageResponse,
 )
+import json
+
 from ..services.ai_coach import Excerpt, TopicBrief, get_coach
+from ..services.thinking import guide as learner_guide
 from ..utils.auth import generate_session_id
 from ..utils.deps import get_current_user, get_owned_course
 from ..utils.text import rank_chunks, truncate
@@ -173,6 +176,9 @@ async def send_message(
         history=history,
         message=payload.message.strip(),
         hint_level=payload.hint_level,
+        learner=learner_guide(
+            json.loads(user.thinking_scores) if user.thinking_scores else None
+        ),
     )
 
     reply = Message(

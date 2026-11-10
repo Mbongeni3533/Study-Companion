@@ -55,6 +55,12 @@ class User(TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(120), default="Student")
     university: Mapped[str | None] = mapped_column(String(200))
+    # Used by the toolbox agents (CV, cover letters) to tailor their output.
+    profession: Mapped[str | None] = mapped_column(String(120))
+    # Thinking check result for the study coach (stored as JSON in scores).
+    thinking_level: Mapped[str | None] = mapped_column(String(24))
+    thinking_scores: Mapped[str | None] = mapped_column(Text)
+    assessment_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     password_hash: Mapped[str | None] = mapped_column(String(255))
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     subscription_tier: Mapped[str] = mapped_column(String(32), default="free", nullable=False)
@@ -67,6 +73,44 @@ class User(TimestampMixin, Base):
     study_logs: Mapped[list["StudyLog"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    counselling_sessions: Mapped[list["CounsellingSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class Feedback(TimestampMixin, Base):
+    """Student feedback and beta issue reports."""
+
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    course_id: Mapped[str | None] = mapped_column(
+        ForeignKey("courses.id", ondelete="SET NULL"), index=True
+    )
+    rating: Mapped[int | None] = mapped_column(Integer)
+    category: Mapped[str] = mapped_column(String(60), default="general", nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    page: Mapped[str | None] = mapped_column(String(200))
+
+    user: Mapped["User | None"] = relationship()
+    course: Mapped["Course | None"] = relationship()
+
+
+class InviteCode(TimestampMixin, Base):
+    """Beta invite code used to gate registration."""
+
+    __tablename__ = "invite_codes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), index=True)
+    max_uses: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    uses: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Course(TimestampMixin, Base):
@@ -250,6 +294,29 @@ class StudyLog(Base):
 
     user: Mapped[User] = relationship(back_populates="study_logs")
     course: Mapped[Course | None] = relationship(back_populates="study_logs")
+
+
+class CounsellingSession(TimestampMixin, Base):
+    """A booked careers/study counselling slot.
+
+    The counsellors themselves ship with the app as content; only the booking
+    belongs to the student.
+    """
+
+    __tablename__ = "counselling_sessions"
+
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    counsellor_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    focus: Mapped[str] = mapped_column(String(120), nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), default="booked", nullable=False)
+
+    user: Mapped[User] = relationship(back_populates="counselling_sessions")
 
 
 class TopicProgress(Base):

@@ -1,0 +1,248 @@
+{
+  "agents": [
+    {
+      "key": "cv",
+      "name": "CV agent",
+      "tagline": "A profession-aware CV in the format recruiters and ATS filters expect."
+    },
+    {
+      "key": "letters",
+      "name": "Letters agent",
+      "tagline": "Cover letters and application emails that sound like you, not a template."
+    },
+    {
+      "key": "humanize",
+      "name": "Humanizer",
+      "tagline": "Turns stiff, machine-sounding prose into plain writing you would actually send."
+    },
+    {
+      "key": "integrity",
+      "name": "Integrity check",
+      "tagline": "Finds copied passages, uncited quotes and phrasing that reads as AI-generated."
+    },
+    {
+      "key": "dictionary",
+      "name": "English dictionary",
+      "tagline": "Look up a word's meaning, pronunciation, examples and synonyms."
+    },
+    {
+      "key": "counselling",
+      "name": "Counselling",
+      "tagline": "Book a session with a careers or study counsellor."
+    }
+  ],
+  "tones": [
+    { "key": "professional", "label": "Professional", "note": "Balanced and safe for any employer." },
+    { "key": "warm", "label": "Warm", "note": "Friendly and personal; good for smaller teams." },
+    { "key": "direct", "label": "Direct", "note": "Short sentences, no filler. Good for busy readers." },
+    { "key": "academic", "label": "Academic", "note": "Formal register for scholarships and research." }
+  ],
+  "counselling_focus": [
+    "CV and LinkedIn review",
+    "Cover letter and email review",
+    "Interview practice",
+    "Graduate scheme applications",
+    "Funding and scholarship applications",
+    "Study plan and exam stress",
+    "Academic writing feedback"
+  ],
+  "professions": {
+    "software-engineer": {
+      "label": "Software Engineer",
+      "summary": "software engineer who builds and ships reliable web applications",
+      "skills": ["JavaScript/TypeScript", "Python", "React", "REST APIs", "SQL", "Git", "Automated testing", "CI/CD"],
+      "certifications": ["Cloud fundamentals certification", "Agile/Scrum certification"],
+      "highlights": [
+        "Shipped features end to end, from design review through to production monitoring.",
+        "Reduced page load time by profiling and fixing the slowest rendering paths.",
+        "Wrote automated tests that caught regressions before release."
+      ],
+      "keywords": ["software development", "full stack", "API", "unit testing", "code review", "agile", "debugging", "deployment"]
+    },
+    "data-analyst": {
+      "label": "Data Analyst",
+      "summary": "data analyst who turns messy datasets into decisions people act on",
+      "skills": ["SQL", "Python (pandas)", "Excel/Sheets", "Power BI or Tableau", "Data cleaning", "Statistics", "Dashboard design", "Stakeholder reporting"],
+      "certifications": ["Google Data Analytics certificate", "Power BI or Tableau certification"],
+      "highlights": [
+        "Built dashboards that replaced a weekly manual reporting pack.",
+        "Cleaned and joined datasets from several systems into one analysis-ready table.",
+        "Presented findings to non-technical stakeholders and recommended a next step."
+      ],
+      "keywords": ["data analysis", "reporting", "visualisation", "SQL queries", "KPIs", "forecasting", "data quality"]
+    },
+    "registered-nurse": {
+      "label": "Registered Nurse",
+      "summary": "registered nurse delivering safe, compassionate patient care in a busy clinical setting",
+      "skills": ["Patient assessment", "Medication administration", "Wound care", "Infection control", "Clinical documentation", "Patient education", "Triage", "Team handover"],
+      "certifications": ["Basic Life Support (BLS)", "Registration with the relevant nursing council"],
+      "highlights": [
+        "Managed a patient caseload while keeping documentation accurate and on time.",
+        "Educated patients and families on discharge care, reducing avoidable readmissions.",
+        "Worked with the multidisciplinary team to escalate deteriorating patients early."
+      ],
+      "keywords": ["patient care", "clinical", "triage", "medication", "safeguarding", "care planning", "ward", "compliance"]
+    },
+    "teacher": {
+      "label": "Teacher",
+      "summary": "teacher who plans engaging lessons and gets measurable progress from every learner",
+      "skills": ["Lesson planning", "Curriculum design", "Classroom management", "Assessment and feedback", "Differentiation", "Parent communication", "Digital learning tools", "Record keeping"],
+      "certifications": ["Teaching qualification", "First aid / safeguarding training"],
+      "highlights": [
+        "Planned and delivered lessons across a full timetable with differentiated materials.",
+        "Used assessment data to target support where progress had stalled.",
+        "Ran an after-school club that increased learner engagement."
+      ],
+      "keywords": ["teaching", "lesson planning", "assessment", "curriculum", "learner support", "classroom", "safeguarding"]
+    },
+    "accountant": {
+      "label": "Accountant",
+      "summary": "accountant who keeps books accurate, reconciles cleanly and prepares audit-ready reports",
+      "skills": ["Bookkeeping", "Reconciliations", "Management accounts", "Tax compliance", "Payroll", "Excel modelling", "Audit preparation", "Financial reporting"],
+      "certifications": ["ACCA / CIMA / CPA progress", "Tax or payroll certification"],
+      "highlights": [
+        "Prepared monthly management accounts and variance commentary for review.",
+        "Cleared reconciliation backlogs and documented the process so it stayed clean.",
+        "Supported an audit by assembling schedules and answering queries on time."
+      ],
+      "keywords": ["accounting", "reconciliation", "financial statements", "tax", "audit", "payroll", "budgeting", "compliance"]
+    },
+    "civil-engineer": {
+      "label": "Civil Engineer",
+      "summary": "civil engineer who designs and delivers safe, buildable infrastructure",
+      "skills": ["AutoCAD/Civil 3D", "Structural analysis", "Site inspection", "Quantity take-offs", "Project scheduling", "Health and safety", "Technical reporting", "Contract documentation"],
+      "certifications": ["Professional engineer registration (in progress)", "Site safety induction"],
+      "highlights": [
+        "Produced drawings and calculations checked against design codes.",
+        "Inspected site works and logged quality and safety issues for close-out.",
+        "Coordinated with contractors to keep a programme on schedule."
+      ],
+      "keywords": ["civil engineering", "structural", "site works", "construction", "design", "health and safety", "surveying"]
+    },
+    "mechanical-engineer": {
+      "label": "Mechanical Engineer",
+      "summary": "mechanical engineer who designs, tests and improves mechanical systems",
+      "skills": ["SolidWorks/CAD", "FEA", "Prototyping", "Tolerance analysis", "Preventive maintenance", "Root-cause analysis", "Technical documentation", "Manufacturing processes"],
+      "certifications": ["CAD certification", "Lean/Six Sigma (Yellow or Green Belt)"],
+      "highlights": [
+        "Designed and tested a component, iterating on the design after test data.",
+        "Diagnosed repeat equipment failures and proposed a fix that held.",
+        "Wrote maintenance procedures that technicians could follow safely."
+      ],
+      "keywords": ["mechanical design", "CAD", "manufacturing", "maintenance", "testing", "tolerances", "root cause"]
+    },
+    "marketing-specialist": {
+      "label": "Marketing Specialist",
+      "summary": "marketing specialist who runs campaigns that bring in measurable leads",
+      "skills": ["Campaign planning", "Content writing", "Social media", "Email marketing", "Google Analytics", "SEO basics", "Paid ads", "Copy editing"],
+      "certifications": ["Google Analytics certification", "HubSpot content marketing certification"],
+      "highlights": [
+        "Planned and ran a multi-channel campaign from brief to report.",
+        "Wrote and edited copy that lifted email click-through.",
+        "Reported on channel performance and recommended where to spend next."
+      ],
+      "keywords": ["marketing", "campaign", "content", "SEO", "social media", "analytics", "lead generation", "brand"]
+    },
+    "graphic-designer": {
+      "label": "Graphic Designer",
+      "summary": "graphic designer who turns a brief into clear, on-brand visual work",
+      "skills": ["Figma", "Adobe Illustrator", "Photoshop", "Typography", "Layout", "Brand systems", "Print production", "Design handover"],
+      "certifications": ["Adobe Certified Professional", "UX/UI fundamentals certificate"],
+      "highlights": [
+        "Delivered print and digital assets from a single brief and brand guide.",
+        "Built reusable design components so the team stopped rebuilding the same layouts.",
+        "Prepared files for print with correct bleed, colour and resolution."
+      ],
+      "keywords": ["graphic design", "branding", "layout", "typography", "Adobe", "Figma", "visual identity"]
+    },
+    "lawyer": {
+      "label": "Lawyer / Legal Graduate",
+      "summary": "legal professional who researches thoroughly and writes advice people can act on",
+      "skills": ["Legal research", "Drafting", "Case analysis", "Contract review", "Client communication", "Due diligence", "Litigation support", "Compliance"],
+      "certifications": ["Admission / bar qualification (or in progress)", "Legal practice course"],
+      "highlights": [
+        "Researched case law and statute and summarised the position in a short memo.",
+        "Reviewed contracts and flagged clauses that carried commercial risk.",
+        "Kept matter files and deadlines in order across several active matters."
+      ],
+      "keywords": ["legal research", "drafting", "contracts", "compliance", "litigation", "advisory", "due diligence"]
+    },
+    "social-worker": {
+      "label": "Social Worker",
+      "summary": "social worker who assesses need and coordinates support for vulnerable people",
+      "skills": ["Needs assessment", "Safeguarding", "Case management", "Report writing", "Multi-agency working", "Crisis intervention", "Advocacy", "Boundary setting"],
+      "certifications": ["Social work registration", "Safeguarding training"],
+      "highlights": [
+        "Held a caseload and kept assessments and case notes up to date.",
+        "Worked with partner agencies to put a support plan in place.",
+        "Supported a person through a crisis and followed up until they were stable."
+      ],
+      "keywords": ["social work", "safeguarding", "case management", "assessment", "advocacy", "vulnerable adults", "child protection"]
+    },
+    "pharmacist": {
+      "label": "Pharmacist",
+      "summary": "pharmacist who dispenses safely and gives patients advice they understand",
+      "skills": ["Dispensing", "Medication review", "Patient counselling", "Inventory control", "Regulatory compliance", "Clinical checks", "Record keeping", "Team supervision"],
+      "certifications": ["Pharmacist registration", "Good Pharmacy Practice training"],
+      "highlights": [
+        "Checked and dispensed prescriptions accurately during high-volume periods.",
+        "Counselled patients on correct use, side effects and interactions.",
+        "Kept stock records and expiry checks compliant with regulation."
+      ],
+      "keywords": ["pharmacy", "dispensing", "medication", "patient counselling", "compliance", "stock control", "clinical"]
+    },
+    "agricultural-scientist": {
+      "label": "Agricultural Scientist",
+      "summary": "agricultural scientist who improves yields with field trials and evidence",
+      "skills": ["Field trials", "Soil analysis", "Crop management", "Data collection", "Statistical analysis", "GIS mapping", "Extension work", "Report writing"],
+      "certifications": ["Pesticide/fumigation licence", "GIS or remote sensing certificate"],
+      "highlights": [
+        "Ran field trials and recorded yield data across treatments and seasons.",
+        "Analysed results and recommended a practice change to growers.",
+        "Worked with smallholders to apply findings in the field."
+      ],
+      "keywords": ["agronomy", "crop science", "soil", "field trials", "sustainable farming", "yield", "extension"]
+    },
+    "project-manager": {
+      "label": "Project Manager",
+      "summary": "project manager who keeps scope, budget and people moving in the same direction",
+      "skills": ["Project planning", "Stakeholder management", "Budget tracking", "Risk management", "Agile/Scrum", "Reporting", "Vendor management", "Change control"],
+      "certifications": ["PMP or PRINCE2 (or in progress)", "Scrum Master certification"],
+      "highlights": [
+        "Ran a project plan with clear owners, milestones and dependencies.",
+        "Tracked budget and flagged overruns before they became problems.",
+        "Kept stakeholders updated with a short weekly report."
+      ],
+      "keywords": ["project management", "stakeholders", "budget", "risk", "milestones", "agile", "delivery"]
+    }
+  },
+  "counsellors": [
+    {
+      "id": "counsellor_naledi",
+      "name": "Dr Naledi Mokoena",
+      "title": "Careers adviser - applications and graduate schemes",
+      "specialties": ["CV and LinkedIn review", "Cover letter and email review", "Graduate scheme applications"],
+      "languages": ["English", "isiZulu"],
+      "bio": "Fifteen years helping graduates get past the first screen. Bring a draft, even a bad one.",
+      "slot_times": ["09:00", "11:00", "14:00"]
+    },
+    {
+      "id": "counsellor_thabo",
+      "name": "Thabo Dlamini",
+      "title": "Interview coach - practice and feedback",
+      "specialties": ["Interview practice", "CV and LinkedIn review"],
+      "languages": ["English", "Sesotho"],
+      "bio": "Runs mock interviews with recorded feedback, including the awkward questions.",
+      "slot_times": ["10:00", "13:00", "16:00"]
+    },
+    {
+      "id": "counsellor_aisha",
+      "name": "Dr Aisha Rahman",
+      "title": "Study skills and academic writing",
+      "specialties": ["Academic writing feedback", "Study plan and exam stress", "Funding and scholarship applications"],
+      "languages": ["English", "Urdu"],
+      "bio": "Works on structure, argument and exam technique rather than proofreading for you.",
+      "slot_times": ["08:00", "12:00", "15:00"]
+    }
+  ]
+}

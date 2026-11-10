@@ -27,6 +27,7 @@
     alert: '<path d="M12 8v5M12 16.5h.01"/><path d="M10.3 3.9 2.6 17.2A1.8 1.8 0 0 0 4.2 20h15.6a1.8 1.8 0 0 0 1.6-2.8L13.7 3.9a1.8 1.8 0 0 0-3.4 0z"/>',
     flame: '<path d="M12 3s5 4.5 5 9a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3.5C11.5 8.5 12 6 12 3z"/>',
     user: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+    toolbox: '<rect x="3" y="7.5" width="18" height="12.5" rx="2"/><path d="M8.5 7.5V5.5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2M3 12.5h18M10 12.5v2.5h4v-2.5"/>',
   };
 
   const icon = (name, cls = "") =>
@@ -207,6 +208,71 @@
     if (event.key === "Escape" && activeModal) activeModal.close();
   });
 
+  function openFeedback() {
+    openModal(`
+      <div class="modal-head">
+        <h2>Send feedback</h2>
+        <button class="icon-btn" data-close aria-label="Close">${icon("x")}</button>
+      </div>
+      <form id="feedback-form" class="form">
+        <div class="field">
+          <label for="feedback-rating">Rating (optional)</label>
+          <select id="feedback-rating">
+            <option value="">No rating</option>
+            <option value="5">5 - Excellent</option>
+            <option value="4">4 - Good</option>
+            <option value="3">3 - Okay</option>
+            <option value="2">2 - Needs work</option>
+            <option value="1">1 - Poor</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="feedback-category">Category</label>
+          <select id="feedback-category">
+            <option value="general">General</option>
+            <option value="bug">Bug</option>
+            <option value="feature">Feature request</option>
+            <option value="content">Course content</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="feedback-message">Message</label>
+          <textarea id="feedback-message" rows="5" required placeholder="What worked, what did not, or what you would like next."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+          <button type="submit" class="btn btn-primary">Send feedback</button>
+        </div>
+      </form>
+    `);
+    const form = $("#feedback-form");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const message = $("#feedback-message").value.trim();
+      if (!message) return toast("Please enter a message.", "error");
+      const ratingValue = $("#feedback-rating").value;
+      const payload = {
+        message,
+        rating: ratingValue ? Number(ratingValue) : null,
+        category: $("#feedback-category").value,
+        course_id: state.course?.id || null,
+        page: window.location.hash || null,
+      };
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      submit.textContent = "Sending...";
+      try {
+        await api("/feedback", { method: "POST", body: payload });
+        closeModal();
+        toast("Thanks for your feedback!", "success");
+      } catch (error) {
+        toast(error.message || "Could not send feedback.", "error");
+        submit.disabled = false;
+        submit.textContent = "Send feedback";
+      }
+    });
+  }
+
   /* -------------------------------------------------------- session state */
   function persist() {
     if (!state.token) {
@@ -304,18 +370,23 @@
     authMode = mode;
     const register = mode === "register";
     $("#auth-name-field").hidden = !register;
+    $("#auth-invite-field").hidden = !register;
     $("#auth-submit").textContent = register ? "Create account" : "Log in";
     $("#auth-toggle").textContent = register ? "Already have an account? Log in" : "New here? Create an account";
     $("#auth-password").setAttribute("autocomplete", register ? "new-password" : "current-password");
     setAuthError("");
   }
 
-  async function startSession(data) {
+  async function startSession(data, onboarding = false) {
     state.token = data.access_token;
     state.user = data.user;
     persist();
     showShell();
     await loadCourses();
+    if (onboarding && !(data.user && data.user.assessment_completed_at)) {
+      window.location.hash = "#/assessment";
+      return;
+    }
     if (!location.hash) window.location.hash = "#/dashboard";
     else render();
   }
@@ -336,9 +407,13 @@
     submit.textContent = authMode === "register" ? "Creating account..." : "Logging in...";
     setAuthError("");
     try {
-      const payload = authMode === "register" ? { email, password, name: name || "Student" } : { email, password };
+      const inviteCode = $("#auth-invite-code").value.trim();
+    const payload =
+      authMode === "register"
+        ? { email, password, name: name || "Student", invite_code: inviteCode || undefined }
+        : { email, password };
       const data = await api(`/auth/${authMode}`, { method: "POST", body: payload, auth: false });
-      await startSession(data);
+      await startSession(data, authMode === "register");
     } catch (error) {
       setAuthError(error.message);
     } finally {
@@ -368,6 +443,8 @@
     const [name, id, tab] = raw.split("/");
     if (name === "course" && id) return { name: "course", id, tab: tab || "materials" };
     if (name === "settings") return { name: "settings" };
+    if (name === "assessment") return { name: "assessment" };
+    if (name === "toolbox") return { name: "toolbox", tab: id || "" };
     if (name === "resources") return { name: "resources", tab: id || "" };
     return { name: "dashboard" };
   }
@@ -409,6 +486,16 @@
         state.tab = "materials";
         renderChrome();
         renderSettings();
+      } else if (route.name === "assessment") {
+        state.course = null;
+        state.tab = "materials";
+        renderChrome();
+        renderAssessment();
+      } else if (route.name === "toolbox") {
+        state.course = null;
+        state.tab = "materials";
+        renderChrome();
+        renderToolbox(route);
       } else if (route.name === "resources") {
         state.course = null;
         state.tab = "materials";
@@ -504,6 +591,43 @@
       </div>
 
       ${resourcesCard()}`;
+  }
+
+  /* --------------------------------------------------------------- toolbox */
+
+  function renderAssessment() {
+    setTopbar("Thinking check", "", "");
+    const host = view();
+    host.innerHTML = `<div id="assessment-host"></div>`;
+    if (window.Assessment && typeof window.Assessment.mount === "function") {
+      window.Assessment.mount($("#assessment-host"), {
+        onComplete: async () => {
+          try { state.user = await api("/auth/me"); } catch (e) { /* ignore */ }
+          persist();
+          renderChrome();
+        },
+      });
+    } else {
+      host.innerHTML = `<div class="empty"><h3>Assessment not loaded</h3></div>`;
+    }
+  }
+
+  function renderToolbox(route) {
+    setTopbar("Toolbox");
+    view().innerHTML = `<div id="tb-host"></div>`;
+
+    if (!window.Toolbox) {
+      view().innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon("alert")}</div>
+          <h3>The toolbox did not load</h3>
+          <p>Reload the page to try again.</p>
+          <button class="btn btn-ghost" data-action="reload">Reload</button>
+        </div>`;
+      return;
+    }
+
+    window.Toolbox.mount($("#tb-host"), { tab: route.tab, user: state.user });
   }
 
   /* ------------------------------------------------------------- resources */
@@ -1199,6 +1323,11 @@
               <input id="profile-university" type="text" value="${esc(user.university || "")}" placeholder="Optional" maxlength="200" />
             </div>
             <div class="field">
+              <label for="profile-profession">Profession or field of study</label>
+              <input id="profile-profession" type="text" value="${esc(user.profession || "")}" placeholder="e.g. Software Engineer" maxlength="120" />
+              <span class="small muted">The Toolbox agents tailor CVs and letters to this.</span>
+            </div>
+            <div class="field">
               <label for="profile-minutes">Daily study goal (minutes)</label>
               <input id="profile-minutes" type="number" min="15" max="480" step="5" value="${user.daily_study_minutes}" />
             </div>
@@ -1224,7 +1353,18 @@
             <button class="btn btn-danger" data-action="signout">${icon("logout")} Sign out</button>
           </div>
         </section>
-      </div>`;
+      </div>
+
+      <section class="card" style="margin-top:16px;">
+        <div class="card-head"><div><h2>Thinking check</h2><p class="card-sub">Helps the coach fit how it explains things to you.</p></div></div>
+        <div class="stack" style="gap:10px;">
+          ${user.thinking_level ? `
+            <p class="small">Your result: <strong>${esc((user.thinking_scores && user.thinking_scores.level_label) || user.thinking_level)}</strong></p>
+            <p class="small muted">${esc((user.thinking_scores && (user.thinking_scores.summary || []).join(" ")) || "")}</p>
+          ` : `<p class="small muted">You have not taken the check yet.</p>`}
+          <button class="btn btn-ghost btn-sm" data-action="retake-assessment">${icon("refresh")} ${user.thinking_level ? "Retake the check" : "Take the check"}</button>
+        </div>
+      </section>`;
 
     $("#profile-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1236,6 +1376,7 @@
           body: {
             name: $("#profile-name").value.trim() || "Student",
             university: $("#profile-university").value.trim(),
+            profession: $("#profile-profession").value.trim(),
             daily_study_minutes: Number($("#profile-minutes").value) || 60,
           },
         });
@@ -1899,6 +2040,10 @@
         state.course = null;
         navigate("#/dashboard");
         return;
+      case "retake-assessment":
+        event.preventDefault();
+        navigate("#/assessment");
+        return;
       case "signout":
         confirmDialog(
           "Sign out?",
@@ -2046,6 +2191,7 @@
 
   $("#new-course-btn").addEventListener("click", openNewCourse);
   $("#new-course-btn-2").addEventListener("click", openNewCourse);
+  $("#feedback-btn").addEventListener("click", openFeedback);
 
   /* --------------------------------------------------------- markdown-lite */
   function md(text) {

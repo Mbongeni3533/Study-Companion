@@ -19,6 +19,13 @@ from . import ocr
 #: Below this many words a PDF is treated as scanned and sent through OCR.
 MIN_PDF_TEXT_WORDS = 25
 
+#: Lower-case joiners that may appear inside a Title Case heading
+#: ("Enzymes and Metabolism", "The Cell Cycle"). They are ignored when deciding
+#: whether a line is capitalised enough to be a heading.
+HEADING_CONNECTORS = frozenset(
+    {"a", "an", "and", "at", "by", "for", "in", "of", "on", "or", "the", "to", "with"}
+)
+
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".text", ".rst", ".csv", ".json", ".log"}
 HTML_EXTENSIONS = {".html", ".htm"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
@@ -441,8 +448,12 @@ class ChunkProcessor:
             return True
         # short Title Case lines ("Cell Structure", "Enzyme Kinetics")
         tokens = re.findall(r"[A-Za-z][A-Za-z0-9'\-]*", text)
-        if 0 < len(tokens) <= 8:
-            capitalised = sum(1 for token in tokens if token[0].isupper())
-            if capitalised / len(tokens) >= 0.7:
+        if 0 < len(tokens) <= 8 and tokens[0][0].isupper():
+            # Connectors such as "and"/"of" are normally lower case, so scoring
+            # them as uncapitalised would reject real headings like
+            # "Enzymes and Metabolism". Judge the meaningful words only.
+            significant = [t for t in tokens if t.lower() not in HEADING_CONNECTORS] or tokens
+            capitalised = sum(1 for token in significant if token[0].isupper())
+            if capitalised / len(significant) >= 0.7:
                 return True
         return False

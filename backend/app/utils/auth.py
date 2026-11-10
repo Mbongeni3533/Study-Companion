@@ -48,6 +48,10 @@ def generate_session_id() -> str:
     return f"chat_{_short_token()}"
 
 
+def generate_booking_id() -> str:
+    return f"cns_{_short_token()}"
+
+
 # ------------------------------------------------------------------ passwords
 def hash_password(password: str) -> str:
     """Hash a password with scrypt (stdlib only, no native build step)."""

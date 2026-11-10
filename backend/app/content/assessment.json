@@ -1,0 +1,172 @@
+{
+  "intro": {
+    "eyebrow": "Before you start",
+    "title": "A quick check, not an exam",
+    "body": "This takes about 3 minutes and has 8 short questions. There are no grades and nothing is shared. Your answers help the coach explain things in a way that fits you.",
+    "note": "You can retake it any time from Settings.",
+    "start": "Start the check",
+    "skip": "Skip for now"
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "kind": "knowledge",
+      "dimension": "reasoning",
+      "prompt": "A notebook and a pen cost R110 together. The notebook costs R100 more than the pen. How much does the pen cost?",
+      "options": [
+        { "id": "a", "label": "R5" },
+        { "id": "b", "label": "R10" },
+        { "id": "c", "label": "R55" },
+        { "id": "d", "label": "R100" }
+      ],
+      "answer": "a",
+      "explain": "The pen is R5 and the notebook is R105. Together that is R110, and R105 is R100 more than R5."
+    },
+    {
+      "id": "q2",
+      "kind": "knowledge",
+      "dimension": "reasoning",
+      "prompt": "What number comes next? 3, 6, 12, 24, ...",
+      "options": [
+        { "id": "a", "label": "30" },
+        { "id": "b", "label": "36" },
+        { "id": "c", "label": "48" },
+        { "id": "d", "label": "60" }
+      ],
+      "answer": "c",
+      "explain": "Each number is double the one before it. 24 doubled is 48."
+    },
+    {
+      "id": "q3",
+      "kind": "knowledge",
+      "dimension": "comprehension",
+      "prompt": "Read this: \"Lerato studies best in the morning. She walks to the library before class because it is quiet there. In the evening, she reviews her notes for 20 minutes.\" What does Lerato do in the evening?",
+      "options": [
+        { "id": "a", "label": "She walks to the library" },
+        { "id": "b", "label": "She reviews her notes" },
+        { "id": "c", "label": "She studies in the morning" },
+        { "id": "d", "label": "She goes to class" }
+      ],
+      "answer": "b",
+      "explain": "The last sentence says she reviews her notes in the evening."
+    },
+    {
+      "id": "q4",
+      "kind": "knowledge",
+      "dimension": "comprehension",
+      "prompt": "Read this: \"Thabo missed the bus, so he arrived late for the test. Even so, he finished before everyone else.\" What can you tell from this?",
+      "options": [
+        { "id": "a", "label": "The test was easy for everyone" },
+        { "id": "b", "label": "Thabo works quickly" },
+        { "id": "c", "label": "Thabo left the test early" },
+        { "id": "d", "label": "The bus came back for him" }
+      ],
+      "answer": "b",
+      "explain": "He started late but finished first, so he must have worked quickly."
+    },
+    {
+      "id": "q5",
+      "kind": "knowledge",
+      "dimension": "planning",
+      "prompt": "You have an exam in 5 days. You have 3 chapters to study and about 2 hours a day. What is the best first step?",
+      "options": [
+        { "id": "a", "label": "Split the chapters over the 5 days and start with a short review" },
+        { "id": "b", "label": "Study the hardest chapter for 2 hours today and nothing else" },
+        { "id": "c", "label": "Read everything the night before the exam" },
+        { "id": "d", "label": "Wait for the teacher to give a summary" }
+      ],
+      "answer": "a",
+      "explain": "Spread over the days, every chapter gets attention and you still have time to review."
+    },
+    {
+      "id": "q6",
+      "kind": "knowledge",
+      "dimension": "planning",
+      "prompt": "You have two tasks. Task A is due tomorrow and counts 30% of your mark. Task B is due in two weeks and counts 10%. Which one do you start first?",
+      "options": [
+        { "id": "a", "label": "Task A, because it is due sooner and counts more" },
+        { "id": "b", "label": "Task B, because it is easier to finish" },
+        { "id": "c", "label": "Both at the same time" },
+        { "id": "d", "label": "Neither, until the teacher reminds you" }
+      ],
+      "answer": "a",
+      "explain": "Task A is more urgent and worth more, so it comes first."
+    },
+    {
+      "id": "q7",
+      "kind": "habit",
+      "dimension": "learning",
+      "prompt": "When a question is hard, what do you do first?",
+      "options": [
+        { "id": "a", "label": "I try a few ideas and see what happens", "style": "explore" },
+        { "id": "b", "label": "I look for an example or a similar question", "style": "examples" },
+        { "id": "c", "label": "I ask someone to show me", "style": "support" },
+        { "id": "d", "label": "I put it away and come back later", "style": "explore" }
+      ]
+    },
+    {
+      "id": "q8",
+      "kind": "habit",
+      "dimension": "learning",
+      "prompt": "How do you know you really understand something?",
+      "options": [
+        { "id": "a", "label": "I can explain it to someone else", "style": "explain" },
+        { "id": "b", "label": "I can say the definition from memory", "style": "examples" },
+        { "id": "c", "label": "I recognise it when I see it", "style": "examples" },
+        { "id": "d", "label": "I am not sure yet", "style": "support" }
+      ]
+    }
+  ],
+  "levels": {
+    "foundation": {
+      "label": "Small steps",
+      "summary": "You are building the basics, and that is a normal place to start. Short steps and examples will work best for you.",
+      "coach_note": "Use short, simple sentences. Give one step at a time, show an example early, and check that each step is clear before moving on.",
+      "actions": [
+        "Give you one small step at a time",
+        "Show an example before asking you to try",
+        "Use short and simple sentences",
+        "Check in before moving to the next idea"
+      ]
+    },
+    "steady": {
+      "label": "Steady pace",
+      "summary": "You have a solid base. You do well when an idea is explained and then you get to use it.",
+      "coach_note": "Explain the idea, then ask the student to use it. Give a hint before the answer, and keep explanations to a few short paragraphs.",
+      "actions": [
+        "Explain the idea, then ask you to use it",
+        "Give a hint before the answer",
+        "Keep each step short"
+      ]
+    },
+    "stretch": {
+      "label": "Ready for a challenge",
+      "summary": "You reason quickly. You will get more from harder questions and fewer hints.",
+      "coach_note": "Be concise. Ask the student to explain first, give fewer hints, and use harder questions and applied examples.",
+      "actions": [
+        "Ask you to explain first",
+        "Give fewer hints",
+        "Push you with harder questions",
+        "Use real examples to test the idea"
+      ]
+    }
+  },
+  "styles": {
+    "explore": {
+      "label": "You learn by trying things",
+      "line": "You like to test your own ideas before you read the answer. The coach will let you try first, then step in."
+    },
+    "examples": {
+      "label": "You learn from examples",
+      "line": "You pick things up faster when you see one worked example first. The coach will show one before you practise."
+    },
+    "explain": {
+      "label": "You learn by explaining",
+      "line": "You understand best when you put it in your own words. The coach will ask you to explain back."
+    },
+    "support": {
+      "label": "You like a guide nearby",
+      "line": "When it gets hard, a person helps. The coach will stay close and break things down with you."
+    }
+  }
+}

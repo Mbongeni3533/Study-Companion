@@ -27,6 +27,12 @@ and plan quality.
    guidance and job boards, a career-path view narrowed to your field and
    country, a document library, and a thesis-writing agent. Content ships with
    the app as JSON, so it needs no key, no database and no second website.
+7. **Toolbox** — a section for the work around studying: a profession-aware CV
+   agent (downloadable as a styled A4 PDF or Markdown), cover letters and
+   application emails, a humanizer that strips clichés
+   and machine phrasing (listing every change), an integrity check for copied
+   text and uncited quotes, and counselling sessions you can book. Writing
+   agents use the same rules-engine/AI switch as the coach.
 
 ## Project structure
 
@@ -43,9 +49,12 @@ study-companion-app/
 │   │   ├── resources.js            # Student Resources Centre view
 │   │   ├── resources.css           # its styles, scoped to .rc-scope
 │   │   ├── thesis-agent.js         # thesis-writing guide (client-side)
-│   │   └── thesis-agent.css
+│   │   ├── thesis-agent.css
+│   │   ├── toolbox.js              # CV, letters, humanizer, integrity, counselling
+│   │   └── toolbox.css             # its styles, scoped to .tb-scope
 │   └── app/
 │       ├── content/resources/      # resources JSON + library markdown
+│       ├── content/toolbox.json    # professions, counsellors, tones
 │       │                           # (edit here; no build step)
 │       ├── config.py               # settings from env / .env
 │       ├── database.py             # SQLAlchemy engine + session
@@ -59,13 +68,18 @@ study-companion-app/
 │       │   ├── tasks.py            # plan generation and task tracking
 │       │   ├── chat.py             # coach conversations
 │       │   ├── progress.py         # minutes, streaks, readiness
-│       │   └── resources.py        # /api/resources/* (static content)
+│       │   ├── resources.py        # /api/resources/* (static content)
+│       │   ├── assessment.py       # thinking check (pre-assessment)
+│       │   └── toolbox.py          # CVs, letters, humanizer, integrity, counselling
 │       ├── services/
 │       │   ├── document_processor.py   # extraction + chunking
 │       │   ├── topic_extractor.py      # topic map builder
 │       │   ├── topic_service.py        # persistence of the topic map
 │       │   ├── ai_provider.py          # optional coach provider (via local gateway)
 │       │   ├── ai_coach.py             # rules engine + AI coach
+│       │   ├── toolbox.py              # toolbox agents + integrity matching
+│       │   ├── thinking.py             # assessment scoring + coach guidance
+│       │   ├── cv_pdf.py               # CV Markdown -> styled PDF (reportlab)
 │       │   └── payment_service.py      # billing hooks (phase 3)
 │       └── utils/                  # auth, dependencies, text/retrieval
 ├── test_api.py                     # import + model smoke test
@@ -204,6 +218,14 @@ fly ssh console -C "chown -R appuser:appuser /app/data"
 | `GET` | `/resources/career-path?field=&region=&performance=` | Field + locations + results band, composed from the stored dataset |
 | `GET` | `/resources/library/{slug}` | One library document, rendered client-side |
 | `GET` | `/resources/library/{slug}/download` | The same document as `text/markdown` |
+| `GET` | `/toolbox/meta` | Agents, tones, professions, counsellors |
+| `POST` | `/toolbox/cv` | Build a CV from profile, profession and experience |
+| `POST` | `/toolbox/cv/pdf` | Render the CV Markdown as a styled A4 PDF |
+| `POST` | `/toolbox/letters` | Cover letter or application email |
+| `POST` | `/toolbox/humanize` | Rewrite machine-sounding text, with a change list |
+| `POST` | `/toolbox/integrity` | Text-match against the student's own library |
+| `GET` `POST` | `/toolbox/counselling` | Free slots, bookings |
+| `POST` | `/toolbox/counselling/{id}/cancel` | Cancel a booking |
 | `GET` | `/health` | Liveness + configuration |
 
 Auth is a bearer JWT (`Authorization: Bearer <token>`). The `/resources/*` routes
@@ -251,10 +273,13 @@ cd backend
 - [x] Plan generation and task tracking with study logs
 - [x] Coach: retrieval, graduated hints, quizzes, flashcards, summaries
 - [x] Progress: minutes, streaks, per-topic mastery, exam readiness
+- [x] Toolbox: CV and letter agents, humanizer, integrity check, counselling bookings
+- [x] Thinking check: a short, plain-English pre-assessment that sets how the coach explains and pushes
 - [x] Bundled responsive web client
 - [ ] Expo mobile client
 - [ ] Spaced-repetition scheduling for reviews
 - [ ] Payments and institution licensing
+- [ ] Web-wide plagiarism checking (the integrity check only sees uploaded material)
 - [ ] Offline mode
 
 ## License

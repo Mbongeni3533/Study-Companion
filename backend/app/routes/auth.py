@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
-from ..models import User
+from ..models import InviteCode, User
 from ..schemas import (
+    AccessPolicy,
     AnonymousSessionCreate,
     Token,
     UserCreate,
@@ -37,6 +38,36 @@ def _token_for(user: User) -> Token:
     )
 
 
+def _allowed_beta_emails() -> set[str]:
+    settings = get_settings()
+    return {item.strip().lower() for item in settings.beta_allowed_emails.split(",") if item.strip()}
+
+
+def _static_beta_codes() -> set[str]:
+    settings = get_settings()
+    return {item.strip() for item in settings.beta_invite_codes.split(",") if item.strip()}
+
+
+def _redeem_invite_code(code: str | None, email: str, db: Session) -> bool:
+    if not code:
+        return False
+    code = code.strip()
+    if code in _static_beta_codes():
+        return True
+    invite = db.scalar(select(InviteCode).where(InviteCode.code == code))
+    if invite is None or invite.revoked:
+        return False
+    if invite.expires_at is not None and invite.expires_at < datetime.now(timezone.utc):
+        return False
+    if invite.email is not None and invite.email.lower() != email.lower():
+        return False
+    if invite.uses >= invite.max_uses:
+        return False
+    invite.uses += 1
+    db.commit()
+    return True
+
+
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)) -> Token:
     email = payload.email.lower().strip()
@@ -48,6 +79,22 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> Token:
         )
 
     settings = get_settings()
+    if settings.beta_invite_only:
+        approved = email in _allowed_beta_emails() or _redeem_invite_code(
+            payload.invite_code, email, db
+        )
+        if not approved:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Registration is invite-only. Use an approved email or a valid invite code.",
+            )
+    elif payload.invite_code is not None:
+        if not _redeem_invite_code(payload.invite_code, email, db):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid or expired invite code.",
+            )
+
     user = User(
         id=generate_user_id(),
         email=email,
@@ -80,6 +127,15 @@ def login(payload: UserLogin, db: Session = Depends(get_db)) -> Token:
     return _token_for(user)
 
 
+@router.get("/access-policy", response_model=AccessPolicy)
+def access_policy() -> AccessPolicy:
+    settings = get_settings()
+    return AccessPolicy(
+        beta_invite_only=settings.beta_invite_only,
+        allow_anonymous_sessions=settings.allow_anonymous_sessions,
+    )
+
+
 @router.post("/anonymous-session", response_model=Token, status_code=status.HTTP_201_CREATED)
 def anonymous_session(
     payload: AnonymousSessionCreate | None = None,
@@ -87,6 +143,11 @@ def anonymous_session(
 ) -> Token:
     """Start studying without an account. The token is the only credential."""
     settings = get_settings()
+    if not settings.allow_anonymous_sessions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest sessions are disabled during the beta.",
+        )
     payload = payload or AnonymousSessionCreate()
     user = User(
         id=generate_user_id(),
@@ -118,6 +179,8 @@ def update_me(
         user.name = payload.name.strip()[:120] or user.name
     if payload.university is not None:
         user.university = payload.university.strip()[:200] or None
+    if payload.profession is not None:
+        user.profession = payload.profession.strip()[:120] or None
     if payload.daily_study_minutes is not None:
         user.daily_study_minutes = payload.daily_study_minutes
     db.commit()

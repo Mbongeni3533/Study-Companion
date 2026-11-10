@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app import __version__
 from app.config import get_settings
 from app.database import get_db, init_db
-from app.routes import auth, chat, documents, progress, resources, tasks
+from app.routes import admin, assessment, auth, chat, documents, executive_agents, feedback, progress, resources, tasks, toolbox
 from app.schemas import HealthResponse
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -33,7 +33,18 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 def asset_version() -> str:
     """Content-derived cache key for the bundled client."""
     stamp = 0
-    for name in ("app.js", "styles.css", "resources.js", "resources.css", "thesis-agent.js", "thesis-agent.css"):
+    for name in (
+        "app.js",
+        "styles.css",
+        "resources.js",
+        "resources.css",
+        "thesis-agent.js",
+        "thesis-agent.css",
+        "toolbox.js",
+        "toolbox.css",
+        "assessment.js",
+        "assessment.css",
+    ):
         path = STATIC_DIR / name
         if path.exists():
             stat = path.stat()
@@ -90,11 +101,16 @@ async def revalidate_static(request: Request, call_next):
 
 
 app.include_router(auth.router)
+app.include_router(admin.router)
+app.include_router(executive_agents.router)
+app.include_router(feedback.router)
 app.include_router(documents.router)
 app.include_router(tasks.router)
 app.include_router(chat.router)
 app.include_router(progress.router)
 app.include_router(resources.router, prefix="/api")
+app.include_router(toolbox.router)
+app.include_router(assessment.router)
 
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")

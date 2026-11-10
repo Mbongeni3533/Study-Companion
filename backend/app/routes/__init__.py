@@ -1,5 +1,5 @@
 """API routers."""
 
-from . import auth, chat, documents, progress, tasks  # noqa: F401
+from . import assessment, auth, chat, documents, progress, tasks, toolbox  # noqa: F401
 
-__all__ = ["auth", "chat", "documents", "progress", "tasks"]
+__all__ = ["assessment", "auth", "chat", "documents", "progress", "tasks", "toolbox"]

@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="/static/styles.css?v=__ASSET_VERSION__" />
   <link rel="stylesheet" href="/static/resources.css?v=__ASSET_VERSION__" />
   <link rel="stylesheet" href="/static/thesis-agent.css?v=__ASSET_VERSION__" />
+  <link rel="stylesheet" href="/static/toolbox.css?v=__ASSET_VERSION__" />
+  <link rel="stylesheet" href="/static/assessment.css?v=__ASSET_VERSION__" />
 </head>
 <body>
   <!-- ------------------------------------------------------------- signed out -->
@@ -44,6 +46,10 @@
         <div class="field">
           <label for="auth-password">Password</label>
           <input id="auth-password" type="password" autocomplete="current-password" placeholder="At least 8 characters" required />
+        </div>
+        <div class="field" id="auth-invite-field" hidden>
+          <label for="auth-invite-code">Invite code (beta)</label>
+          <input id="auth-invite-code" type="text" autocomplete="off" placeholder="BETA-..." />
         </div>
         <button class="btn btn-primary btn-block" id="auth-submit" type="submit">Create account</button>
         <p class="form-error" id="auth-error" hidden></p>
@@ -93,6 +99,9 @@
         <button class="nav-item" data-route="dashboard">
           <span class="nav-icon" data-icon="grid"></span><span>Today</span>
         </button>
+        <button class="nav-item" data-route="toolbox">
+          <span class="nav-icon" data-icon="toolbox"></span><span>Toolbox</span>
+        </button>
         <button class="nav-item" data-route="resources">
           <span class="nav-icon" data-icon="book"></span><span>Resources</span>
         </button>
@@ -113,6 +122,7 @@
         <button class="btn btn-primary btn-block" id="new-course-btn-2">
           <span class="nav-icon" data-icon="plus"></span> New course
         </button>
+        <button class="btn btn-ghost btn-block" id="feedback-btn">Send feedback</button>
         <button class="user-chip" id="user-chip" title="Settings"></button>
       </div>
     </aside>
@@ -131,6 +141,8 @@
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <script src="/static/resources.js?v=__ASSET_VERSION__"></script>
+  <script src="/static/toolbox.js?v=__ASSET_VERSION__"></script>
+  <script src="/static/assessment.js?v=__ASSET_VERSION__"></script>
   <script src="/static/app.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>

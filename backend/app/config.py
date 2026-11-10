@@ -36,6 +36,23 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24 * 30
 
+    # --- Beta access control ---
+    # When true, new accounts require an allowlisted email or a valid invite code.
+    beta_invite_only: bool = False
+    # Comma-separated emails that may register during the beta.
+    beta_allowed_emails: str = ""
+    # Comma-separated reusable invite codes (master codes). Database-backed
+    # single-use codes are managed through the admin endpoints.
+    beta_invite_codes: str = ""
+    # Shared secret for the beta admin endpoints (X-Admin-Key header).
+    beta_admin_key: str = ""
+
+    # --- Email delivery for beta invites (Resend) ---
+    resend_api_key: str | None = None
+    resend_from_email: str = "Study Companion <onboarding@resend.dev>"
+    # Whether guest/anonymous sessions are allowed. Disabled by default for beta.
+    allow_anonymous_sessions: bool = False
+
     # --- Storage ---
     database_url: str = ""
     data_dir: Path = BACKEND_DIR / "data"
