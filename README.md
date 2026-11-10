@@ -111,33 +111,6 @@ Run the app as usual:
 cd backend && ./start.sh            # http://localhost:8000
 ```
 
-## Deploy to Render
-
-The repository ships a `render.yaml` blueprint, and the `Dockerfile` reads the
-host's `PORT` and keeps its data directory where `DATA_DIR` points.
-
-1. Render Dashboard → **New → Blueprint** → pick this repository and the branch
-   you want to deploy.
-2. Apply the blueprint. It creates one web service on the `0.5c-512mb` plan
-   (~$7/month) with a 1 GB disk mounted at `/var/data` and `DATA_DIR=/var/data`.
-3. `JWT_SECRET` is generated for you. Optionally add `ANTHROPIC_API_KEY` in the
-   dashboard to switch the coach from the rules engine to the AI provider.
-
-The service gets a permanent `https://<name>.onrender.com` URL and redeploys on
-every push.
-
-> A **free** Render web service cannot attach a disk. Its filesystem is wiped on
-every deploy, restart and idle spin-down, which would erase accounts, courses and
-uploads, so this blueprint asks for a paid plan.
-
-Run the same image locally when you want to check the container:
-
-```bash
-docker build -t study-companion .
-docker run --rm -p 8000:8000 -v "$PWD/data:/app/data" study-companion
-# http://localhost:8000
-```
-
 ## Demo in 30 seconds
 
 1. **New course** → e.g. "Cell Biology", exam date in a few weeks.
