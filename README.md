@@ -22,6 +22,11 @@ and plan quality.
    full walkthrough. Quizzes and flashcards are generated from the material.
 5. **Progress** — minutes studied, streaks, per-topic mastery and an exam
    readiness score driven by topic coverage × completed tasks.
+6. **Student Resources Centre** — a section of the app (sidebar → *Resources*,
+   also on the dashboard) with scholarships, research placements, career
+   guidance and job boards, a career-path view narrowed to your field and
+   country, a document library, and a thesis-writing agent. Content ships with
+   the app as JSON, so it needs no key, no database and no second website.
 
 ## Project structure
 
@@ -33,9 +38,15 @@ study-companion-app/
 │   ├── start.sh                    # dev server (reload)
 │   ├── static/                     # bundled study client (no build step)
 │   │   ├── index.html
-│   │   ├── app.js
-│   │   └── styles.css
+│   │   ├── app.js                  # shell, routes, dashboard, course views
+│   │   ├── styles.css
+│   │   ├── resources.js            # Student Resources Centre view
+│   │   ├── resources.css           # its styles, scoped to .rc-scope
+│   │   ├── thesis-agent.js         # thesis-writing guide (client-side)
+│   │   └── thesis-agent.css
 │   └── app/
+│       ├── content/resources/      # resources JSON + library markdown
+│       │                           # (edit here; no build step)
 │       ├── config.py               # settings from env / .env
 │       ├── database.py             # SQLAlchemy engine + session
 │       ├── models.py               # User, Course, Document, Chunk, Topic,
@@ -47,7 +58,8 @@ study-companion-app/
 │       │   ├── documents.py        # courses, uploads, topics, search
 │       │   ├── tasks.py            # plan generation and task tracking
 │       │   ├── chat.py             # coach conversations
-│       │   └── progress.py         # minutes, streaks, readiness
+│       │   ├── progress.py         # minutes, streaks, readiness
+│       │   └── resources.py        # /api/resources/* (static content)
 │       ├── services/
 │       │   ├── document_processor.py   # extraction + chunking
 │       │   ├── topic_extractor.py      # topic map builder
@@ -188,9 +200,15 @@ fly ssh console -C "chown -R appuser:appuser /app/data"
 | `GET` | `/progress/summary` | Dashboard aggregates |
 | `GET` | `/progress/courses/{id}` | Per-course readiness and mastery |
 | `POST` | `/progress/log` | Log study minutes manually |
+| `GET` | `/resources/{section}` | Resources content: overview, scholarships, research, career, employment, library |
+| `GET` | `/resources/career-path?field=&region=&performance=` | Field + locations + results band, composed from the stored dataset |
+| `GET` | `/resources/library/{slug}` | One library document, rendered client-side |
+| `GET` | `/resources/library/{slug}/download` | The same document as `text/markdown` |
 | `GET` | `/health` | Liveness + configuration |
 
-Auth is a bearer JWT (`Authorization: Bearer <token>`).
+Auth is a bearer JWT (`Authorization: Bearer <token>`). The `/resources/*` routes
+are public: they serve the same content to every student and hold no personal
+data.
 
 ## How the pieces work
 

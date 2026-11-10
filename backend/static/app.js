@@ -40,9 +40,7 @@
     ["plan", "Plan"],
     ["coach", "Coach"],
     ["progress", "Progress"],
-    ["resources", "Student Resources Centre"],
   ];
-  const RESOURCES_URL = "https://site-6beba36387f34076a1e817544bb2a4a5.freebuff.page/resources#path";
 
   const state = {
     token: null,
@@ -256,10 +254,9 @@
     const user = state.user;
     if (!user) return;
 
+    const current = parseRoute();
     document.querySelectorAll(".nav-item").forEach((item) => {
-      const route = item.dataset.route;
-      const active = route === "dashboard" ? !state.course : route === "settings" && state.course === null && location.hash.includes("settings");
-      item.classList.toggle("active", Boolean(active));
+      item.classList.toggle("active", item.dataset.route === current.name);
     });
 
     const nav = $("#course-nav");
@@ -365,6 +362,7 @@
     const [name, id, tab] = raw.split("/");
     if (name === "course" && id) return { name: "course", id, tab: tab || "materials" };
     if (name === "settings") return { name: "settings" };
+    if (name === "resources") return { name: "resources", tab: id || "" };
     return { name: "dashboard" };
   }
 
@@ -406,6 +404,11 @@
         state.tab = "materials";
         renderChrome();
         renderSettings();
+      } else if (route.name === "resources") {
+        state.course = null;
+        state.tab = "materials";
+        renderChrome();
+        renderResources(route);
       } else {
         state.course = null;
         state.tab = "materials";
@@ -493,7 +496,66 @@
           </div>
           ${state.courses.length ? `<div class="stack">${state.courses.map((course) => courseMini(course)).join("")}</div>` : emptyBlock("book", "Add your first course", "A course groups your documents, topics and plan.", `<button class="btn btn-primary btn-sm" data-action="new-course">${icon("plus")} New course</button>`)}
         </section>
-      </div>`;
+      </div>
+
+      ${resourcesCard()}`;
+  }
+
+  /* ------------------------------------------------------------- resources */
+
+  function renderResources(route) {
+    setTopbar("Student Resources Centre");
+    view().innerHTML = `<div id="rc-host"></div>`;
+
+    if (!window.ResourcesCentre) {
+      view().innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">${icon("alert")}</div>
+          <h3>The resources centre did not load</h3>
+          <p>Reload the page to try again.</p>
+          <button class="btn btn-ghost" data-action="reload">Reload</button>
+        </div>`;
+      return;
+    }
+
+    window.ResourcesCentre.mount($("#rc-host"), { tab: route.tab });
+  }
+
+  function resourcesCard() {
+    const entries = [
+      ["scholarships", "Scholarships", "Funding for tuition, living costs and tests."],
+      ["thesis", "Thesis guide", "Ten stages from a blank page to a defended thesis."],
+      ["path", "My career path", "Opportunities narrowed to your field and country."],
+      ["library", "Library", "Guides and practice papers to read or download."],
+    ];
+
+    return `
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Student Resources Centre</h2>
+            <p class="card-sub">Scholarships, research routes, careers, jobs and a thesis-writing guide - all in the app.</p>
+          </div>
+          <div class="card-head-actions">
+            <button class="btn btn-ghost btn-sm" data-action="open-resources">Open ${icon("arrow")}</button>
+          </div>
+        </div>
+        <div class="stack">
+          ${entries
+            .map(
+              (entry) => `<button class="course-nav-item" data-action="open-resources" data-tab="${entry[0]}" style="padding:10px 12px;">
+                <span class="course-initials">${icon("book")}</span>
+                <span class="user-chip-text">
+                  <span class="user-chip-name">${esc(entry[1])}</span>
+                  <span class="user-chip-role">${esc(entry[2])}</span>
+                </span>
+                <span class="spacer"></span>
+                <span class="chip">Open</span>
+              </button>`
+            )
+            .join("")}
+        </div>
+      </section>`;
   }
 
   function statCard(label, value, foot, meterHtml, glyph) {
@@ -630,9 +692,6 @@
 
       <div class="tabs" role="tablist">
         ${TABS.map(([key, label]) => {
-          if (key === "resources") {
-            return `<a class="tab" href="${RESOURCES_URL}" target="_blank" rel="noopener noreferrer" role="tab">${icon("book")} ${label}</a>`;
-          }
           const count = key === "plan" ? (state.tasks.length ? ` (${state.tasks.length})` : "") : key === "topics" ? (state.topics.length ? ` (${state.topics.length})` : "") : key === "materials" ? (state.documents.length ? ` (${state.documents.length})` : "") : "";
           return `<button class="tab ${state.tab === key ? "active" : ""}" role="tab" data-action="tab" data-tab="${key}">${label}${count}</button>`;
         }).join("")}
@@ -1834,6 +1893,10 @@
         await loadCourses();
         render();
         return;
+      case "open-resources":
+        event.preventDefault();
+        navigate(target.dataset.tab ? `#/resources/${target.dataset.tab}` : "#/resources");
+        return;
       case "tab":
         event.preventDefault();
         state.tab = target.dataset.tab;
@@ -1936,7 +1999,7 @@
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.addEventListener("click", () => {
       state.course = null;
-      navigate(item.dataset.route === "settings" ? "#/settings" : "#/dashboard");
+      navigate(`#/${item.dataset.route}`);
     });
   });
 

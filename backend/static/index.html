@@ -8,6 +8,8 @@
   <meta name="theme-color" content="#0b1020" />
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/static/styles.css?v=__ASSET_VERSION__" />
+  <link rel="stylesheet" href="/static/resources.css?v=__ASSET_VERSION__" />
+  <link rel="stylesheet" href="/static/thesis-agent.css?v=__ASSET_VERSION__" />
 </head>
 <body>
   <!-- ------------------------------------------------------------- signed out -->
@@ -91,6 +93,9 @@
         <button class="nav-item" data-route="dashboard">
           <span class="nav-icon" data-icon="grid"></span><span>Today</span>
         </button>
+        <button class="nav-item" data-route="resources">
+          <span class="nav-icon" data-icon="book"></span><span>Resources</span>
+        </button>
         <button class="nav-item" data-route="settings">
           <span class="nav-icon" data-icon="settings"></span><span>Settings</span>
         </button>
@@ -125,6 +130,7 @@
   <div id="modal-root"></div>
   <div id="toasts" class="toasts" aria-live="polite"></div>
 
+  <script src="/static/resources.js?v=__ASSET_VERSION__"></script>
   <script src="/static/app.js?v=__ASSET_VERSION__"></script>
 </body>
 </html>
