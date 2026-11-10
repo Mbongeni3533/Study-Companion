@@ -552,6 +552,45 @@
         </div>
       </div>
 
+      <section class="card" style="margin-bottom:18px;">
+        <div class="card-head">
+          <div>
+            <h2>What Study Companion does</h2>
+            <p class="card-sub">A quick overview before you start.</p>
+          </div>
+        </div>
+        <p class="small" style="margin:0 0 12px;">
+          Study Companion turns the course material you already have into a topic map, a realistic study plan, and a hint-first coach.
+          Everything is built from your own documents, so explanations stay grounded and the coach never invents content.
+        </p>
+        <div class="stack">
+          <div class="course-nav-item" style="padding:8px 12px;">
+            <span class="course-initials">${icon("upload")}</span>
+            <span class="user-chip-text"><span class="user-chip-name">Upload anything</span><span class="user-chip-role">PDF, slides, Word, notes or pasted text.</span></span>
+          </div>
+          <div class="course-nav-item" style="padding:8px 12px;">
+            <span class="course-initials">${icon("map")}</span>
+            <span class="user-chip-text"><span class="user-chip-name">See the topic map</span><span class="user-chip-role">Know what your course is really made of, with difficulty and weight.</span></span>
+          </div>
+          <div class="course-nav-item" style="padding:8px 12px;">
+            <span class="course-initials">${icon("list")}</span>
+            <span class="user-chip-text"><span class="user-chip-name">Follow a study plan</span><span class="user-chip-role">Tasks spread across days around your daily minute budget.</span></span>
+          </div>
+          <div class="course-nav-item" style="padding:8px 12px;">
+            <span class="course-initials">${icon("chat")}</span>
+            <span class="user-chip-text"><span class="user-chip-name">Study with a coach</span><span class="user-chip-role">Hints first, answers second, always from your material.</span></span>
+          </div>
+          <div class="course-nav-item" style="padding:8px 12px;">
+            <span class="course-initials">${icon("target")}</span>
+            <span class="user-chip-text"><span class="user-chip-name">Track readiness</span><span class="user-chip-role">Minutes, streaks, mastery and an exam readiness score.</span></span>
+          </div>
+          <div class="course-nav-item" style="padding:8px 12px;">
+            <span class="course-initials">${icon("toolbox")}</span>
+            <span class="user-chip-text"><span class="user-chip-name">Toolbox & resources</span><span class="user-chip-role">CVs, letters, humanizer, integrity checks, counselling and the Student Resources Centre.</span></span>
+          </div>
+        </div>
+      </section>
+
       <div class="stat-grid">
         ${statCard("Study time today", fmtMinutes(minutesToday), `Goal ${fmtMinutes(goal)}`, meter(minutesToday, goal), "clock")}
         ${statCard("Open tasks", String(summary ? summary.tasks_open : 0), `${summary ? summary.tasks_completed : 0} completed`, "", "list")}
