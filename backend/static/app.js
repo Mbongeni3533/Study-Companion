@@ -237,6 +237,12 @@
   }
 
   /* ------------------------------------------------------------- chrome */
+  function closeNav() {
+    $("#sidebar").classList.remove("open");
+    document.body.classList.remove("nav-open");
+    $("#menu-btn").setAttribute("aria-expanded", "false");
+  }
+
   function showAuth(message) {
     $("#auth-view").hidden = false;
     $("#shell").hidden = true;
@@ -393,8 +399,7 @@
     if (!state.user) return;
     const route = parseRoute();
     const token = ++renderToken;
-    document.body.classList.remove("nav-open");
-    $("#sidebar").classList.remove("open");
+    closeNav();
 
     try {
       if (route.name === "course") {
@@ -699,11 +704,16 @@
 
       <div id="tab-panel">${tabContent()}</div>`;
 
-    // Keep the active tab visible when the tab bar overflows on small screens.
+    // Keep the active tab visible when the bar overflows on a phone. Scroll the
+    // minimum needed: centring it left the neighbouring tab half cut off.
     const activeTab = view().querySelector(".tab.active");
     if (activeTab) {
       const bar = activeTab.parentElement;
-      bar.scrollLeft = activeTab.offsetLeft - bar.clientWidth / 2 + activeTab.clientWidth / 2;
+      const barRect = bar.getBoundingClientRect();
+      const tabRect = activeTab.getBoundingClientRect();
+      if (tabRect.right > barRect.right || tabRect.left < barRect.left) {
+        bar.scrollLeft += tabRect.left - barRect.left - 8;
+      }
     }
 
     if (state.tab === "coach") await initChat(token);
@@ -1045,7 +1055,20 @@
       (state.chat.sending
         ? `<div class="msg msg-assistant"><span class="msg-avatar">SC</span><div class="bubble"><span class="typing"><i></i><i></i><i></i></span></div></div>`
         : "");
-    thread.scrollTop = thread.scrollHeight;
+    scrollThreadToLatest(thread);
+  }
+
+  function scrollThreadToLatest(thread) {
+    // Desktop keeps the thread as its own scroll area; on a phone the thread
+    // grows with the page, so bring the newest message and the input into view
+    // instead of setting a scrollTop that has nothing to scroll.
+    if (thread.scrollHeight > thread.clientHeight + 8) {
+      thread.scrollTop = thread.scrollHeight;
+      return;
+    }
+    if (!window.matchMedia("(max-width: 900px)").matches) return;
+    const composer = $("#chat-form");
+    if (composer) composer.scrollIntoView({ block: "nearest" });
   }
 
   async function sendChat(prompt) {
@@ -1992,8 +2015,21 @@
   });
 
   $("#menu-btn").addEventListener("click", () => {
-    $("#sidebar").classList.toggle("open");
-    document.body.classList.toggle("nav-open");
+    const open = $("#sidebar").classList.toggle("open");
+    document.body.classList.toggle("nav-open", open);
+    $("#menu-btn").setAttribute("aria-expanded", String(open));
+  });
+
+  // Tapping the dimmed page, or Escape, closes the drawer. Without this the
+  // only way out on a phone was to pick a menu item.
+  document.addEventListener("click", (event) => {
+    if (!document.body.classList.contains("nav-open")) return;
+    if (event.target.closest("#sidebar") || event.target.closest("#menu-btn")) return;
+    closeNav();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.body.classList.contains("nav-open")) closeNav();
   });
 
   document.querySelectorAll(".nav-item").forEach((item) => {

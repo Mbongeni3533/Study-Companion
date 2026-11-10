@@ -233,7 +233,9 @@ select { appearance: none; background-image: none; cursor: pointer; }
 }
 
 /* ==================================================================== shell */
-.shell { display: flex; min-height: 100vh; }
+.shell { display: flex; min-height: 100vh; min-height: 100dvh; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 .sidebar {
   width: 268px;
@@ -948,19 +950,27 @@ select { appearance: none; background-image: none; cursor: pointer; }
 
 /* ============================================================= responsive */
 @media (max-width: 900px) {
-  .auth-view { grid-template-columns: 1fr; padding: 32px 22px 56px; }
+  .auth-view { grid-template-columns: 1fr; padding: 32px 22px calc(56px + env(safe-area-inset-bottom)); }
   .auth-panel { max-width: 100%; }
+
   #menu-btn { display: inline-grid; }
+
   .sidebar {
     position: fixed;
     inset: 0 auto 0 0;
     z-index: 60;
+    width: min(300px, 84vw);
+    height: 100dvh;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
     transform: translateX(-105%);
     transition: transform 0.2s ease;
     box-shadow: var(--shadow);
     background: linear-gradient(180deg, #131b30, #0a0f1d);
   }
   .sidebar.open { transform: none; }
+
+  /* The page behind the drawer must not scroll while it is open. */
+  body.nav-open { overflow: hidden; }
   body.nav-open::after {
     content: "";
     position: fixed;
@@ -968,7 +978,70 @@ select { appearance: none; background-image: none; cursor: pointer; }
     background: rgba(4, 7, 16, 0.6);
     z-index: 50;
   }
-  .view { padding: 18px 16px 64px; }
+
+  .view { padding: 18px 16px calc(64px + env(safe-area-inset-bottom)); }
+
+  /* Touch targets: 44px is the smallest comfortable size on a phone. */
+  .nav-item { min-height: 44px; }
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 40px; }
+  .icon-btn { width: 40px; height: 40px; }
+  .tab { padding: 12px 14px 13px; }
+  /* Fade the edges so a half-scrolled tab reads as "there is more" rather than
+     as a clipped label. */
+  .tabs {
+    scroll-padding-inline: 16px;
+    mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+  }
+  .task-check { width: 24px; height: 24px; margin-top: 0; }
+  .icon-btn.small { width: 34px; height: 34px; }
+  /* An odd number of stat cards leaves the last one alone on a row. */
+  .stat-grid > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .course-nav-item { min-height: 44px; }
+
+  /* iOS zooms the whole page when a focused control is under 16px. */
+  input,
+  select,
+  textarea { font-size: 16px; }
+
+  /* Long course titles truncate instead of pushing the primary action away. */
+  .topbar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar { padding-top: max(16px, env(safe-area-inset-top)); }
+
+  /* Course header: one clean row of actions instead of a wrapped pile. */
+  .page-head { gap: 12px; }
+  .page-head-actions { margin-left: 0; width: 100%; align-items: center; }
+  .page-head-actions .btn { flex: 1 1 auto; }
+  /* The topbar already carries "Add material", so the copy below it goes. */
+  .page-head-actions [data-action="add-material"] { display: none; }
+
+  /* A conversation reads badly inside a second scrollbar on a phone: the thread
+     grows with the page and the client scrolls to the composer after a reply. */
+  .chat-thread { max-height: none; overflow: visible; }
+  .msg { max-width: 100%; }
+  .composer textarea { min-height: 68px; max-height: 140px; scrollbar-width: thin; }
+  .composer-row { align-items: flex-end; }
+  .composer-row .btn { min-height: 44px; }
+  .suggestion { font-size: 13px; padding: 10px 14px; }
+  #hint-picker button { min-height: 36px; padding-inline: 14px; }
+
+  .modal-backdrop { padding: 12px; }
+  .modal { width: 100%; max-height: 90dvh; padding: 18px; }
+  .modal-foot { display: grid; grid-template-columns: 1fr 1fr; }
+}
+
+/* Phones: the modal becomes a sheet, so its buttons stay under the thumb. */
+@media (max-width: 560px) {
+  .modal-backdrop { place-items: end center; padding: 0; }
+  .modal {
+    border-radius: 18px 18px 0 0;
+    max-height: 92dvh;
+    padding: 20px 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .auth-panel h1 { font-size: 26px; }
+  .stat-grid { gap: 12px; }
+  .view { padding-inline: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

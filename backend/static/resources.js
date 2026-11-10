@@ -1041,7 +1041,8 @@
     for (const line of lines) {
       if (!line.trim()) {
         flushParagraph();
-        closeList();
+        // A blank line between bullets or numbered items does not end the list;
+        // closing here restarted the numbering on every item.
         continue;
       }
 
@@ -1076,6 +1077,8 @@
         continue;
       }
 
+      // Plain prose after a list starts a new block, so the list ends here.
+      closeList();
       paragraph.push(line.trim());
     }
 
