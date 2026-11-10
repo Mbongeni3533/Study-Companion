@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -28,6 +28,17 @@ logger = logging.getLogger("study_companion")
 
 settings = get_settings()
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+def asset_version() -> str:
+    """Content-derived cache key for the bundled client."""
+    stamp = 0
+    for name in ("app.js", "styles.css"):
+        path = STATIC_DIR / name
+        if path.exists():
+            stat = path.stat()
+            stamp = max(stamp, int(stat.st_mtime_ns) + stat.st_size)
+    return str(stamp)
 
 
 @asynccontextmanager
@@ -73,7 +84,8 @@ async def revalidate_static(request: Request, call_next):
     """
     response = await call_next(request)
     if request.url.path.startswith("/static/") or request.url.path in {"/", "/favicon.ico"}:
-        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        # Never clobber a stricter value set by the handler (the shell uses no-store).
+        response.headers.setdefault("Cache-Control", "no-cache, must-revalidate")
     return response
 
 
@@ -87,8 +99,18 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     @app.get("/", include_in_schema=False)
-    def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    def index() -> HTMLResponse:
+        """Serve the shell with a content-derived asset version.
+
+        The version is baked into the script/stylesheet URLs, so a browser can
+        never run last deploy's client against this API - and the HTML itself is
+        never cached.
+        """
+        html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        return HTMLResponse(
+            html.replace("__ASSET_VERSION__", asset_version()),
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
