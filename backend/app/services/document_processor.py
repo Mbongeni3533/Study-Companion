@@ -262,24 +262,31 @@ class ChunkProcessor:
         chunk_size = max(20, int(chunk_size))
         overlap = max(0, min(int(overlap), chunk_size - 1))
 
-        # 1. paragraph blocks, tracking the most recent short "heading" line
+        # 1. paragraph blocks, tracking the most recent short "heading" line.
+        #    PDF extractors often return a whole page as one block with single
+        #    newlines, so headings are detected inside a block too - but only when
+        #    the line before them ends a sentence, which keeps wrapped prose lines
+        #    from being mistaken for headings.
         blocks: list[tuple[str | None, str]] = []
         heading: str | None = None
         for raw_block in re.split(r"\n\s*\n", cleaned):
-            block = raw_block.strip()
-            if not block:
-                continue
-            if "\n" in block:
-                first, _, rest = block.partition("\n")
-                if cls._looks_like_heading(first) and rest.strip():
-                    heading = first.strip("# ").strip()
-                    block = rest.strip()
-                    if not block:
-                        continue
-            elif cls._looks_like_heading(block) and len(block.split()) <= 12:
-                heading = block.strip("# ").strip()
-                continue
-            blocks.append((heading, block))
+            lines = [line.strip() for line in raw_block.split("\n") if line.strip()]
+            buffer: list[str] = []
+            for line in lines:
+                starts_section = bool(buffer) is False or bool(re.search(r"[.!?:;]$", buffer[-1]))
+                if (
+                    starts_section
+                    and len(line.split()) <= 12
+                    and cls._looks_like_heading(line)
+                ):
+                    if buffer:
+                        blocks.append((heading, " ".join(buffer)))
+                        buffer = []
+                    heading = line.strip("# ").strip()
+                    continue
+                buffer.append(line)
+            if buffer:
+                blocks.append((heading, " ".join(buffer)))
 
         # 2. pack sentences up to chunk_size
         chunks: list[dict] = []

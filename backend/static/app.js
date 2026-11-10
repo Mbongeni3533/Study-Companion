@@ -1268,26 +1268,49 @@
 
     const fileInput = $("#modal-file");
     const dropzone = $("#modal-dropzone");
-    fileInput.addEventListener("change", () => {
+
+    // The real input is visually hidden, so the whole dropzone opens the picker.
+    dropzone.tabIndex = 0;
+    dropzone.setAttribute("role", "button");
+    dropzone.addEventListener("click", (event) => {
+      if (event.target === fileInput) return;
+      event.preventDefault();
+      fileInput.click();
+    });
+    dropzone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    const showFile = () => {
       const file = fileInput.files[0];
       $("#modal-drop-title").textContent = file ? file.name : "Drop a file or click to browse";
+    };
+    fileInput.addEventListener("change", showFile);
+
+    // Depth counter: dragleave fires for child nodes too, which would flicker.
+    let dragDepth = 0;
+    dropzone.addEventListener("dragenter", (event) => {
+      event.preventDefault();
+      dragDepth += 1;
+      dropzone.classList.add("dragging");
     });
-    ["dragenter", "dragover"].forEach((type) =>
-      dropzone.addEventListener(type, (event) => {
-        event.preventDefault();
-        dropzone.classList.add("dragging");
-      })
-    );
-    ["dragleave", "drop"].forEach((type) =>
-      dropzone.addEventListener(type, (event) => {
-        event.preventDefault();
-        dropzone.classList.remove("dragging");
-      })
-    );
+    dropzone.addEventListener("dragover", (event) => event.preventDefault());
+    dropzone.addEventListener("dragleave", (event) => {
+      event.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) dropzone.classList.remove("dragging");
+    });
     dropzone.addEventListener("drop", (event) => {
-      if (event.dataTransfer.files.length) {
-        fileInput.files = event.dataTransfer.files;
-        $("#modal-drop-title").textContent = event.dataTransfer.files[0].name;
+      event.preventDefault();
+      dragDepth = 0;
+      dropzone.classList.remove("dragging");
+      const files = event.dataTransfer && event.dataTransfer.files;
+      if (files && files.length) {
+        fileInput.files = files;
+        showFile();
       }
     });
 
