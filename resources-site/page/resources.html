@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Student Resources Centre | Study Companion</title>
+  <meta name="description" content="Scholarships, research opportunities, career guidance and employment routes for students." />
+  <link rel="icon" type="image/svg+xml" href="/static/resources/favicon.svg" />
+  <link rel="stylesheet" href="/static/resources/styles.css" />
+  <link rel="stylesheet" href="/static/resources/thesis-agent.css" />
+</head>
+<body>
+  <a class="skip-link" href="#panels">Skip to content</a>
+
+  <div class="app">
+    <header class="hero">
+      <div class="hero__inner">
+        <p class="eyebrow">Study Companion</p>
+        <h1>Student Resources Centre</h1>
+        <p class="hero__intro" id="hero-intro">
+          Scholarships, research placements, career guidance and live job routes,
+          gathered in one place and organised by what you are trying to do next.
+        </p>
+        <ul class="stats" id="stats" aria-label="Resources available"></ul>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="Resource sections" role="tablist">
+      <div class="tabs__inner" id="tabs">
+        <button role="tab" id="tab-scholarships" aria-controls="panel-scholarships" aria-selected="true" data-tab="scholarships">Scholarships</button>
+        <button role="tab" id="tab-research" aria-controls="panel-research" aria-selected="false" data-tab="research">Research</button>
+        <button role="tab" id="tab-thesis" aria-controls="panel-thesis" aria-selected="false" data-tab="thesis">Thesis guide</button>
+        <button role="tab" id="tab-path" aria-controls="panel-path" aria-selected="false" data-tab="path">My career path</button>
+        <button role="tab" id="tab-career" aria-controls="panel-career" aria-selected="false" data-tab="career">Careers</button>
+        <button role="tab" id="tab-employment" aria-controls="panel-employment" aria-selected="false" data-tab="employment">Jobs</button>
+        <button role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false" data-tab="library">Library</button>
+      </div>
+    </nav>
+
+    <main id="panels" class="panels">
+      <section class="panel" id="panel-scholarships" role="tabpanel" aria-labelledby="tab-scholarships">
+        <div class="panel__head">
+          <h2>Scholarship opportunities</h2>
+          <p>Funding for tuition, living costs and the tests that get you there. Deadlines follow each funder's own cycle.</p>
+        </div>
+        <div id="scholarships-body" class="loading">Loading scholarships…</div>
+      </section>
+
+      <section class="panel" id="panel-research" role="tabpanel" aria-labelledby="tab-research" hidden>
+        <div class="panel__head">
+          <h2>Research opportunities</h2>
+          <p>Summer placements, funded master's and PhD routes, and how to write to a supervisor.</p>
+        </div>
+        <div id="research-body" class="loading">Loading research routes…</div>
+      </section>
+
+      <section class="panel" id="panel-thesis" role="tabpanel" aria-labelledby="tab-thesis" hidden>
+        <div class="panel__head">
+          <h2>Your research and thesis guide</h2>
+          <p>An agent that walks you from a blank page to a defended thesis: scope the topic, frame the question, search the literature, design the method, write the proposal, analyse, write up and submit. Tell it your deadline and it builds a week-by-week plan. Everything stays in this browser.</p>
+        </div>
+
+        <div class="agent" id="thesis-agent">
+          <aside class="agent__side">
+            <div class="agent__progress">
+              <span class="agent__progress-label">Your progress</span>
+              <div class="agent__bar"><span id="agent-bar"></span></div>
+              <span id="agent-percent">0% complete</span>
+            </div>
+            <ol class="agent__roadmap" id="agent-roadmap"></ol>
+            <button class="agent__reset" id="agent-reset" type="button">Start over</button>
+          </aside>
+
+          <div class="agent__main">
+            <div class="agent__log" id="agent-log" role="log" aria-live="polite" aria-label="Thesis guide conversation"></div>
+            <form class="agent__composer" id="agent-form">
+              <label class="sr-only" for="agent-input">Ask the thesis guide</label>
+              <input id="agent-input" type="text" autocomplete="off" placeholder="Ask: how do I narrow my topic?" />
+              <button class="button" type="submit">Send</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-path" role="tabpanel" aria-labelledby="tab-path" hidden>
+        <div class="panel__head">
+          <h2>My career path</h2>
+          <p>Choose your field of study and one or more locations. The centre then narrows every opportunity down to your field, at home and abroad.</p>
+        </div>
+
+        <form class="path-picker" id="path-picker">
+          <div class="field">
+            <label for="path-field">Field of study</label>
+            <select id="path-field" name="field"></select>
+          </div>
+          <div class="field field--locations">
+            <span class="field-label" id="path-locations-label">Where you are based</span>
+            <div class="path-locations" id="path-region-options" role="group" aria-labelledby="path-locations-label"></div>
+            <p class="path-picker__hint">Tick every location you care about — your country plus any destination — to see those opportunities together.</p>
+          </div>
+          <div class="field field--performance">
+            <span class="field-label" id="path-performance-label">Your academic performance</span>
+            <div class="path-performance" id="path-performance-options" role="radiogroup" aria-labelledby="path-performance-label"></div>
+            <p class="path-picker__hint">Use your current average. The career agent changes its advice with your results — it is guidance, not an eligibility ruling.</p>
+          </div>
+          <p class="path-picker__note">Your choice is saved on this device, so this tab opens on your field next time. <button type="button" class="path-reset" id="path-reset">Clear my saved data</button></p>
+        </form>
+
+        <div id="path-body" class="loading">Loading your career path…</div>
+      </section>
+
+      <section class="panel" id="panel-career" role="tabpanel" aria-labelledby="tab-career" hidden>
+        <div class="panel__head">
+          <h2>Building your career</h2>
+          <p>How to move from your degree into the work you actually want, by field of study.</p>
+        </div>
+        <div id="career-body" class="loading">Loading career guidance…</div>
+      </section>
+
+      <section class="panel" id="panel-employment" role="tabpanel" aria-labelledby="tab-employment" hidden>
+        <div class="panel__head">
+          <h2>Employment opportunities</h2>
+          <p>Where graduate roles are advertised, which entry routes exist, and what to check before you apply.</p>
+        </div>
+        <div id="employment-body" class="loading">Loading job routes…</div>
+      </section>
+
+      <section class="panel" id="panel-library" role="tabpanel" aria-labelledby="tab-library" hidden>
+        <div class="panel__head">
+          <h2>Resource library</h2>
+          <p>Guides and practice papers shared with the platform. Open a document to read it here, or download a copy.</p>
+        </div>
+        <div id="library-body" class="loading">Loading documents…</div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Student Resources Centre · Study Companion</p>
+      <p class="footer__note">Opportunity details are checked against each funder's official page. Always confirm dates and eligibility at the source before applying.</p>
+    </footer>
+  </div>
+
+  <dialog id="doc-dialog" class="dialog" aria-labelledby="doc-title">
+    <div class="dialog__head">
+      <div>
+        <p class="eyebrow eyebrow--dark" id="doc-kind">Document</p>
+        <h2 id="doc-title">Document</h2>
+      </div>
+      <button class="dialog__close" id="doc-close" aria-label="Close document">Close</button>
+    </div>
+    <div class="dialog__body" id="doc-body"></div>
+    <div class="dialog__foot">
+      <a id="doc-download" class="button" href="#" download>Download document</a>
+      <p class="muted" id="doc-source"></p>
+    </div>
+  </dialog>
+
+  <noscript>
+    <p class="noscript">The resources centre needs JavaScript to load its content.</p>
+  </noscript>
+
+  <script src="/static/resources/thesis-agent.js"></script>
+  <script src="/static/resources/app.js"></script>
+</body>
+</html>

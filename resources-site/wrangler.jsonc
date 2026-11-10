@@ -1,0 +1,10 @@
+{
+  // Local preview only. Publishing uses ../manifest.json, which lists the same
+  // worker module and assets directory.
+  "name": "student-resources-centre",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./public"
+  }
+}

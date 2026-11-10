@@ -1,0 +1,12 @@
+{
+  "entrypoint": "index.js",
+  "compatibilityDate": "2026-11-01",
+  "modules": [
+    { "name": "index.js", "type": "esm", "path": "./worker/index.js" },
+    { "name": "data.js", "type": "esm", "path": "./worker/data.js" },
+    { "name": "page.js", "type": "esm", "path": "./worker/page.js" },
+    { "name": "career-path.js", "type": "esm", "path": "./worker/career-path.js" },
+    { "name": "career-path-data.js", "type": "esm", "path": "./worker/career-path-data.js" }
+  ],
+  "assetsDirectory": "./public"
+}
