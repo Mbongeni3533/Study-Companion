@@ -10,7 +10,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -63,6 +63,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def revalidate_static(request: Request, call_next):
+    """Make browsers revalidate the bundled client after an update.
+
+    Without this a cached ``styles.css``/``app.js`` can outlive a deployment and
+    the UI silently runs old code against a new API.
+    """
+    response = await call_next(request)
+    if request.url.path.startswith("/static/") or request.url.path in {"/", "/favicon.ico"}:
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
 
 app.include_router(auth.router)
 app.include_router(documents.router)

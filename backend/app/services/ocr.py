@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 import threading
 from pathlib import Path
-from typing import Iterator
+from collections.abc import Callable, Iterator
 
 #: Engine used for the last successful load (``None`` until something is tried).
 _ENGINE_NAME: str | None = None
@@ -151,11 +151,15 @@ def ocr_pdf(
     *,
     max_pages: int = 25,
     dpi: int = 150,
+    page_total: int | None = None,
+    on_page: Callable[[int, int], None] | None = None,
 ) -> tuple[str, list[str], int]:
     """OCR a PDF.
 
     Returns ``(text, warnings, pages_read)``. Blank pages are skipped silently;
-    the caller decides what to do when nothing could be read.
+    the caller decides what to do when nothing could be read. ``on_page`` is
+    called with ``(pages_done, pages_planned)`` after every page so callers can
+    report progress.
     """
     engine = engine_name()
     if engine is None:
@@ -169,6 +173,7 @@ def ocr_pdf(
             "is installed. Install one with: pip install pypdfium2"
         ], 0
 
+    planned = min(page_total, max_pages) if page_total else max_pages
     pages: list[str] = []
     pages_read = 0
     for image in pdf_page_images(path, max_pages=max_pages, dpi=dpi):
@@ -176,6 +181,8 @@ def ocr_pdf(
         text = ocr_image(image)
         if text:
             pages.append(text)
+        if on_page is not None:
+            on_page(pages_read, max(planned, pages_read))
 
     if not pages:
         return "", [f"OCR ({engine}) found no readable text in this PDF."], pages_read

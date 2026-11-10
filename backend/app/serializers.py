@@ -108,6 +108,9 @@ def document_response(document: Document) -> DocumentResponse:
         extraction_warnings=list(document.extraction_warnings or []),
         created_at=document.created_at,
         processed_at=document.processed_at,
+        progress_stage=document.progress_stage,
+        progress_current=document.progress_current or 0,
+        progress_total=document.progress_total or 0,
     )
 
 

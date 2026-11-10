@@ -912,6 +912,31 @@ select { appearance: none; background-image: none; cursor: pointer; }
 .toast.info .icon { color: var(--cyan); }
 
 /* ================================================================ skeleton */
+.upload-progress {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: rgba(24, 33, 58, 0.97);
+  box-shadow: var(--shadow);
+  font-size: 13.5px;
+  animation: slide 0.2s ease;
+}
+.upload-head { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.upload-title { font-weight: 560; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-stage { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.upload-spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid rgba(148, 163, 184, 0.28);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .skeleton {
   border-radius: 10px;
   background: linear-gradient(90deg, rgba(148, 163, 184, 0.08) 25%, rgba(148, 163, 184, 0.16) 37%, rgba(148, 163, 184, 0.08) 63%);

@@ -164,6 +164,79 @@ def ocr_fallback() -> str:
         return f"{result.word_count} words recovered with {ocr.engine_name()}"
 
 
+def gateway_smoke() -> str:
+    """The coach's model call should route through the in-process Respan gateway.
+
+    A local fixture stands in for the provider, so the check needs no key and no
+    network. It drives the real path: coach -> ClaudeProvider -> gateway ->
+    gateway's ``study-coach`` route -> fixture.
+    """
+    import asyncio
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from app.services.ai_coach import AIStudyCoach, Excerpt, TopicBrief
+    from app.services.ai_provider import ClaudeProvider, COACH_ROUTE
+
+    seen: dict[str, object] = {}
+
+    class Fixture(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802 - http.server naming
+            length = int(self.headers.get("Content-Length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            seen["path"] = self.path
+            seen["model"] = body.get("model")
+            reply = {
+                "id": "msg_fixture",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-fixture",
+                "content": [{"type": "text", "text": "Start by defining osmosis in your own words."}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 12, "output_tokens": 10},
+            }
+            payload = json.dumps(reply).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args) -> None:  # keep the check quiet
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Fixture)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_address[1]}"
+        provider = ClaudeProvider("fixture-key", model="claude-sonnet-4-5", base_url=base_url)
+        coach = AIStudyCoach(provider=provider)
+        answer = asyncio.run(
+            coach.reply(
+                course_title="Cell Biology",
+                course_code=None,
+                topics=[TopicBrief(title="Osmosis", difficulty=3)],
+                excerpts=[Excerpt(text="Osmosis is the diffusion of water across a membrane.", heading="Osmosis")],
+                history=[],
+                message="quiz me on osmosis",
+                hint_level=1,
+            )
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert answer.source == "ai", f"expected the AI path, got {answer.source}: {answer.text[:80]}"
+    assert "osmosis" in answer.text.lower(), answer.text
+    assert seen.get("path") == "/v1/messages", seen
+    # The app asked for COACH_ROUTE; the gateway forwarded the resolved model.
+    assert seen.get("model") == "claude-sonnet-4-5", f"unexpected forwarded model {seen.get('model')!r}"
+    return f"route {COACH_ROUTE} -> claude-sonnet-4-5 at the fixture, {answer.citations}"
+
+
 def models() -> str:
     from app.models import User
 
@@ -189,6 +262,7 @@ for name, fn in [
     ("Topic mapping", topic_map),
     ("Study plan (rules)", coach_plan),
     ("OCR fallback", ocr_fallback),
+    ("Gateway routing", gateway_smoke),
     ("Models", models),
 ]:
     check(name, fn)

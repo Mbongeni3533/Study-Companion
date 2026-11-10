@@ -57,8 +57,46 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
+def _add_missing_columns() -> None:
+    """Additive migration for columns added after a database was created.
+
+    ``create_all`` never alters an existing table, so an upgraded deployment
+    would otherwise fail on any newly added column.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    statements: list[str] = []
+    for table in Base.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing = {column["name"] for column in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing:
+                continue
+            ddl = (
+                f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" '
+                f"{column.type.compile(dialect=engine.dialect)}"
+            )
+            default = getattr(column.default, "arg", None)
+            if isinstance(default, bool):
+                ddl += f" DEFAULT {int(default)}"
+            elif isinstance(default, (int, float)):
+                ddl += f" DEFAULT {default}"
+            elif isinstance(default, str):
+                ddl += " DEFAULT '" + default.replace("'", "''") + "'"
+            statements.append(ddl)
+
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
 def init_db() -> None:
-    """Create any missing tables. Safe to call on every startup."""
+    """Create any missing tables and columns. Safe to call on every startup."""
     from . import models  # noqa: F401  (registers the models on Base.metadata)
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()

@@ -117,6 +117,10 @@ class Document(TimestampMixin, Base):
     page_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     extraction_warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Live progress while a (possibly OCR'd) upload is being processed.
+    progress_stage: Mapped[str | None] = mapped_column(String(32))
+    progress_current: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    progress_total: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
 
     course: Mapped[Course] = relationship(back_populates="documents")
     chunks: Mapped[list["Chunk"]] = relationship(

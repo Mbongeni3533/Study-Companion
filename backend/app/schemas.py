@@ -116,6 +116,9 @@ class DocumentResponse(ORMModel):
     extraction_warnings: list[str] = Field(default_factory=list)
     created_at: datetime
     processed_at: datetime | None
+    progress_stage: str | None = None
+    progress_current: int = 0
+    progress_total: int = 0
 
     @field_validator("extraction_warnings", mode="before")
     @classmethod

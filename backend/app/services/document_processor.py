@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,7 +51,10 @@ def _read_plain(path: Path) -> ExtractionResult:
     raise ExtractionError("File is not valid UTF-8 or Latin-1 text")
 
 
-def _read_pdf(path: Path) -> ExtractionResult:
+def _read_pdf(
+    path: Path,
+    on_progress: Callable[[str, int, int], None] | None = None,
+) -> ExtractionResult:
     try:
         from pypdf import PdfReader
     except ImportError as exc:  # pragma: no cover - dependency is declared
@@ -90,8 +94,20 @@ def _read_pdf(path: Path) -> ExtractionResult:
                 "No selectable text found - this looks like a scanned PDF and OCR is disabled."
             )
         else:
+            # Announce OCR before the first page so the UI can show page progress
+            # instead of sitting on "reading" for the whole scan.
+            if on_progress is not None:
+                on_progress("ocr", 0, min(len(pages), settings.ocr_max_pages))
             ocr_text, ocr_warnings, _ = ocr.ocr_pdf(
-                path, max_pages=settings.ocr_max_pages, dpi=settings.ocr_dpi
+                path,
+                max_pages=settings.ocr_max_pages,
+                dpi=settings.ocr_dpi,
+                page_total=len(pages),
+                on_page=(
+                    (lambda done, total: on_progress("ocr", done, total))
+                    if on_progress is not None
+                    else None
+                ),
             )
             warnings.extend(ocr_warnings)
             if ocr_text:
@@ -226,14 +242,28 @@ class DocumentProcessor:
         return Path(filename).suffix.lower() in cls.SUPPORTED_EXTENSIONS
 
     @classmethod
-    def extract(cls, path: str | Path, filename: str, content_type: str | None = None) -> ExtractionResult:
+    def extract(
+        cls,
+        path: str | Path,
+        filename: str,
+        content_type: str | None = None,
+        on_progress: Callable[[str, int, int], None] | None = None,
+    ) -> ExtractionResult:
+        """Extract text from ``path``.
+
+        ``on_progress(stage, current, total)`` is called as work proceeds:
+        ``reading`` for plain extraction and ``ocr`` page by page for scans.
+        """
         file_path = Path(path)
         suffix = Path(filename).suffix.lower()
+
+        if on_progress is not None:
+            on_progress("reading", 0, 0)
 
         if suffix in TEXT_EXTENSIONS:
             result = _read_plain(file_path)
         elif suffix == ".pdf":
-            result = _read_pdf(file_path)
+            result = _read_pdf(file_path, on_progress=on_progress)
         elif suffix in DOC_EXTENSIONS:
             result = _read_docx(file_path)
         elif suffix == ".doc":

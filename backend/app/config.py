@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     # --- AI provider (optional) ---
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-4-5"
+    # Optional override for the endpoint the gateway forwards to (local fixture
+    # or an already-authorized proxy). Empty means api.anthropic.com.
+    anthropic_base_url: str | None = None
     ai_timeout_seconds: float = 45.0
     ai_max_tokens: int = 1200
 

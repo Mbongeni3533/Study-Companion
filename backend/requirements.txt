@@ -17,6 +17,9 @@ python-docx>=1.1
 python-pptx>=0.6.23
 Pillow>=10.3
 
+# Local LLM gateway that every coach model call is routed through
+respan-gateway==0.3.0
+
 # OCR for scanned PDFs and image uploads (optional at runtime; imports are guarded)
 pypdfium2>=4.30
 rapidocr-onnxruntime>=1.3

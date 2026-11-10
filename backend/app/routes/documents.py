@@ -5,13 +5,21 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.concurrency import run_in_threadpool
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..database import get_db
+from ..database import SessionLocal, get_db
 from ..models import Chunk, Course, Document, StudyLog, User
 from ..schemas import (
     ChunkResponse,
@@ -161,56 +169,43 @@ def _store_upload(file: UploadFile, destination: Path, max_bytes: int) -> int:
     return size
 
 
-def _ingest(
+def _write_document(
     db: Session,
     course: Course,
+    document: Document,
     *,
-    filename: str,
     text: str,
-    content_type: str | None,
-    storage_path: str | None,
-    size_bytes: int,
     page_count: int = 0,
     warnings: list[str] | None = None,
-) -> tuple[Document, int, int]:
-    """Persist a document, its chunks and the refreshed topic map."""
-    settings = get_settings()
-    document = Document(
-        id=generate_document_id(),
-        course_id=course.id,
-        filename=filename[:255],
-        content_type=content_type,
-        size_bytes=size_bytes,
-        storage_path=storage_path,
-        status="processing",
-        page_count=page_count,
-        extraction_warnings=warnings or [],
-    )
-    db.add(document)
-    db.flush()
-
+) -> tuple[int, int]:
+    """Store a document's chunks and rebuild the topic map."""
     cleaned = clean_text(text)
     document.word_count = len(words(cleaned))
     document.page_count = page_count
+    document.extraction_warnings = list(warnings or [])
     document.status = "ready"
+    document.progress_stage = None
+    document.progress_current = 0
+    document.progress_total = 0
 
     pieces = ChunkProcessor.chunk_text(
         cleaned,
         chunk_size=ChunkProcessor.DEFAULT_CHUNK_SIZE,
         overlap=ChunkProcessor.DEFAULT_OVERLAP,
     )
-    chunks: list[Chunk] = []
+    chunk_count = 0
     for piece in pieces:
-        chunk = Chunk(
-            document_id=document.id,
-            course_id=course.id,
-            position=piece["index"],
-            text=piece["text"],
-            word_count=piece["word_count"],
-            heading=(piece.get("heading") or "")[:300] or None,
+        db.add(
+            Chunk(
+                document_id=document.id,
+                course_id=course.id,
+                position=piece["index"],
+                text=piece["text"],
+                word_count=piece["word_count"],
+                heading=(piece.get("heading") or "")[:300] or None,
+            )
         )
-        db.add(chunk)
-        chunks.append(chunk)
+        chunk_count += 1
     db.flush()
 
     document.processed_at = datetime.now(timezone.utc)
@@ -218,7 +213,72 @@ def _ingest(
     topics = rebuild_course_topics(db, course)
     db.commit()
     db.refresh(document)
-    return document, len(chunks), len(topics)
+    return chunk_count, len(topics)
+
+
+def _process_upload(
+    document_id: str,
+    course_id: str,
+    filename: str,
+    content_type: str | None,
+    destination: Path,
+) -> None:
+    """Extract (and OCR) an upload in the background, publishing progress."""
+    db = SessionLocal()
+    try:
+        document = db.get(Document, document_id)
+        course = db.get(Course, course_id)
+        if document is None or course is None:
+            return
+
+        def progress(stage: str, current: int, total: int) -> None:
+            document.progress_stage = stage
+            document.progress_current = current
+            document.progress_total = total
+            db.commit()
+
+        progress("reading", 0, 0)
+        try:
+            extraction = DocumentProcessor.extract(
+                destination, filename, content_type, on_progress=progress
+            )
+        except Exception as exc:  # noqa: BLE001 - surface any failure on the document
+            db.rollback()
+            document = db.get(Document, document_id)
+            if document is None:
+                return
+            document.status = "failed"
+            document.error_message = (
+                str(exc) if isinstance(exc, ExtractionError) else f"Could not read file: {exc}"
+            )
+            document.progress_stage = None
+            document.progress_current = 0
+            document.progress_total = 0
+            db.commit()
+            return
+
+        progress("indexing", 0, 0)
+        _write_document(
+            db,
+            course,
+            document,
+            text=extraction.text,
+            page_count=extraction.page_count,
+            warnings=extraction.warnings,
+        )
+    except Exception:  # noqa: BLE001 - a background crash must not hang the UI
+        db.rollback()
+        try:
+            document = db.get(Document, document_id)
+            if document is not None and document.status == "processing":
+                document.status = "failed"
+                document.error_message = "Processing failed unexpectedly."
+                document.progress_stage = None
+                db.commit()
+        finally:
+            pass
+    finally:
+        db.close()
 
 
 @router.post(
@@ -228,10 +288,16 @@ def _ingest(
 )
 async def upload_document(
     course_id: str,
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> DocumentUploadResult:
+    """Store the upload, then extract (and OCR) it in the background.
+
+    The response returns immediately with a ``processing`` document; the client
+    polls ``GET /courses/{id}/documents/{document_id}`` for live progress.
+    """
     settings = get_settings()
     course = get_owned_course(course_id, db, user)
 
@@ -253,55 +319,32 @@ async def upload_document(
         destination.unlink(missing_ok=True)
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
-    try:
-        # Extraction (and OCR for scans) is CPU bound - keep the event loop free.
-        extraction = await run_in_threadpool(
-            DocumentProcessor.extract, destination, filename, file.content_type
-        )
-    except ExtractionError as exc:
-        document = Document(
-            id=generate_document_id(),
-            course_id=course.id,
-            filename=filename[:255],
-            content_type=file.content_type,
-            size_bytes=size,
-            storage_path=str(destination),
-            status="failed",
-            error_message=str(exc),
-        )
-        db.add(document)
-        db.commit()
-        db.refresh(document)
-        return DocumentUploadResult(
-            document=document_response(document),
-            message=str(exc),
-        )
-
-    document, chunk_count, topic_count = _ingest(
-        db,
-        course,
-        filename=filename,
-        text=extraction.text,
+    document = Document(
+        id=generate_document_id(),
+        course_id=course.id,
+        filename=filename[:255],
         content_type=file.content_type,
-        storage_path=str(destination),
         size_bytes=size,
-        page_count=extraction.page_count,
-        warnings=extraction.warnings,
+        storage_path=str(destination),
+        status="processing",
+        progress_stage="queued",
     )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
 
-    warnings = " ".join(extraction.warnings)
-    message = (
-        f"Processed {document.word_count} words into {chunk_count} chunks "
-        f"across {topic_count} topics."
+    background.add_task(
+        _process_upload,
+        document.id,
+        course.id,
+        filename,
+        file.content_type,
+        destination,
     )
-    if warnings:
-        message = f"{message} {warnings}"
 
     return DocumentUploadResult(
         document=document_response(document),
-        topics_created=topic_count,
-        chunks_created=chunk_count,
-        message=message,
+        message=f"Reading {filename}...",
     )
 
 
@@ -324,15 +367,17 @@ def paste_notes(
             status_code=400, detail="Paste at least 20 words so there is something to study."
         )
 
-    document, chunk_count, topic_count = _ingest(
-        db,
-        course,
+    document = Document(
+        id=generate_document_id(),
+        course_id=course.id,
         filename=(payload.filename or "Pasted notes.txt")[:255],
-        text=text,
         content_type="text/plain",
-        storage_path=None,
         size_bytes=len(text.encode("utf-8")),
+        status="processing",
     )
+    db.add(document)
+    db.flush()
+    chunk_count, topic_count = _write_document(db, course, document, text=text)
     return DocumentUploadResult(
         document=document_response(document),
         topics_created=topic_count,

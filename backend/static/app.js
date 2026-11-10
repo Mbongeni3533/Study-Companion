@@ -622,6 +622,7 @@
         </div>
         <div class="page-head-actions">
           ${ring(course.readiness_score)}
+          <button class="icon-btn" data-action="edit-course" title="Edit or delete this course" aria-label="Edit or delete this course">${icon("settings")}</button>
           <button class="btn btn-ghost" data-action="gen-plan">${icon("spark")} Generate plan</button>
           <button class="btn btn-primary" data-action="add-material">${icon("upload")} Add material</button>
         </div>
@@ -1238,6 +1239,98 @@
     });
   }
 
+  function openEditCourse() {
+    const course = state.course;
+    if (!course) return;
+    openModal(`
+      <h2>Edit course</h2>
+      <p class="modal-sub">Rename the course, fix the code or change the exam date.</p>
+      <form id="course-edit-form">
+        <div class="modal-body">
+          <div class="field">
+            <label for="edit-title">Course title</label>
+            <input id="edit-title" required maxlength="200" value="${esc(course.title)}" />
+          </div>
+          <div class="form-row">
+            <div class="field"><label for="edit-code">Code</label><input id="edit-code" maxlength="60" value="${esc(course.code || "")}" placeholder="BIO101" /></div>
+            <div class="field"><label for="edit-exam">Exam date</label><input id="edit-exam" type="date" value="${course.exam_date || ""}" /></div>
+          </div>
+          <div class="field"><label for="edit-subject">Subject</label><input id="edit-subject" maxlength="120" value="${esc(course.subject || "")}" placeholder="Biology" /></div>
+          <div class="field"><label for="edit-description">Notes</label><textarea id="edit-description" maxlength="4000" style="min-height:80px;" placeholder="What this course covers, or how you want to study it">${esc(course.description || "")}</textarea></div>
+          <p class="form-error" id="edit-error" hidden></p>
+        </div>
+        <div class="modal-foot" style="justify-content:space-between;">
+          <button type="button" class="btn btn-danger" data-action="delete-course">${icon("trash")} Delete course</button>
+          <div class="row" style="gap:8px;">
+            <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+            <button type="submit" class="btn btn-primary" id="edit-submit">Save changes</button>
+          </div>
+        </div>
+      </form>`);
+
+    $("#course-edit-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const title = $("#edit-title").value.trim();
+      if (title.length < 2) {
+        const error = $("#edit-error");
+        error.hidden = false;
+        error.textContent = "Give the course a title.";
+        return;
+      }
+      const button = $("#edit-submit");
+      button.disabled = true;
+      button.textContent = "Saving...";
+      try {
+        const updated = await api(`/documents/courses/${course.id}`, {
+          method: "PATCH",
+          body: {
+            title,
+            code: $("#edit-code").value.trim() || null,
+            subject: $("#edit-subject").value.trim() || null,
+            description: $("#edit-description").value.trim() || null,
+            exam_date: $("#edit-exam").value || null,
+          },
+        });
+        state.course = updated;
+        closeModal();
+        await loadCourses();
+        render();
+        toast("Course updated.", "success");
+      } catch (error) {
+        const errorNode = $("#edit-error");
+        errorNode.hidden = false;
+        errorNode.textContent = error.message;
+        button.disabled = false;
+        button.textContent = "Save changes";
+      }
+    });
+  }
+
+  function deleteCourse() {
+    const course = state.course;
+    if (!course) return;
+    confirmDialog(
+      `Delete "${course.title}"?`,
+      "This removes the course, its documents, topic map, plan and chat history. This cannot be undone.",
+      "Delete course",
+      async () => {
+        try {
+          await api(`/documents/courses/${course.id}`, { method: "DELETE" });
+          state.course = null;
+          state.topics = [];
+          state.tasks = [];
+          state.documents = [];
+          await loadCourses();
+          navigate("#/dashboard");
+          toast("Course deleted.", "info");
+        } catch (error) {
+          toast(error.message, "error");
+        }
+      },
+      true
+    );
+  }
+
   function openAddMaterial() {
     if (!state.course) {
       toast("Open a course first, then add material.", "error");
@@ -1330,30 +1423,35 @@
 
       button.disabled = true;
       const original = button.innerHTML;
-      button.innerHTML = "Processing...";
+      button.innerHTML = "Uploading...";
       try {
-        let result;
         if (file) {
           const form = new FormData();
           form.append("file", file);
-          result = await api(`/documents/courses/${state.course.id}/documents`, { method: "POST", form });
-        } else {
-          result = await api(`/documents/courses/${state.course.id}/documents/paste`, {
+          const result = await api(`/documents/courses/${state.course.id}/documents`, {
             method: "POST",
-            body: { text: notes },
+            form,
           });
+          // Extraction/OCR runs server-side; the card below follows live progress.
+          closeModal();
+          await trackUpload(result.document);
+          return;
         }
+        const result = await api(`/documents/courses/${state.course.id}/documents/paste`, {
+          method: "POST",
+          body: { text: notes },
+        });
         closeModal();
         await refreshCourse();
-        toast(result.message || "Material added.", result.document && result.document.status === "failed" ? "error" : "success");
+        toast(result.message || "Notes added.", "success");
         if (state.tab === "materials") navigate(`#/course/${state.course.id}/topics`);
+        return;
       } catch (error) {
         errorNode.hidden = false;
         errorNode.textContent = error.message;
-      } finally {
-        button.disabled = false;
-        button.innerHTML = original;
       }
+      button.disabled = false;
+      button.innerHTML = original;
     });
   }
 
@@ -1539,16 +1637,110 @@
   }
 
   /* --------------------------------------------------------- event plumbing */
+  const UPLOAD_STAGE_LABELS = {
+    queued: "Waiting to start",
+    reading: "Reading the file",
+    ocr: "Reading pages with OCR",
+    indexing: "Building chunks and topics",
+  };
+
+  function uploadCardMarkup(doc) {
+    return `
+      <div class="upload-head">
+        <span class="upload-spinner" aria-hidden="true"></span>
+        <span class="upload-title">${esc(doc.filename)}</span>
+      </div>
+      <div class="upload-stage" data-stage>Waiting to start</div>
+      <div class="meter"><span data-bar style="width:6%"></span></div>`;
+  }
+
+  function paintUploadCard(card, doc) {
+    const stage = doc.progress_stage || "queued";
+    const current = doc.progress_current || 0;
+    const total = doc.progress_total || 0;
+    let label = UPLOAD_STAGE_LABELS[stage] || "Working";
+    let percent = 10;
+    if (stage === "reading") {
+      percent = 25;
+    } else if (stage === "ocr") {
+      if (total) {
+        label = current
+          ? `Reading page ${current} of ${total} with OCR`
+          : `Starting OCR - ${plural(total, "page")}`;
+        percent = current ? Math.round((current / total) * 100) : 8;
+      } else {
+        label = current ? `Reading page ${current} with OCR` : "Starting OCR";
+        percent = 12;
+      }
+    } else if (stage === "indexing") {
+      percent = 92;
+    }
+    card.querySelector("[data-stage]").textContent = label;
+    card.querySelector("[data-bar]").style.width = `${Math.min(97, Math.max(6, percent))}%`;
+  }
+
+  async function trackUpload(doc) {
+    if (!doc) return null;
+    const courseId = state.course.id;
+    let card = $("#upload-progress");
+    if (!card) {
+      card = document.createElement("div");
+      card.id = "upload-progress";
+      card.className = "upload-progress";
+      card.setAttribute("role", "status");
+      card.setAttribute("aria-live", "polite");
+      $("#toasts").appendChild(card);
+    }
+    card.innerHTML = uploadCardMarkup(doc);
+    paintUploadCard(card, doc);
+
+    const deadline = Date.now() + 10 * 60 * 1000;
+    let latest = doc;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      try {
+        latest = await api(`/documents/courses/${courseId}/documents/${doc.id}`);
+      } catch (error) {
+        card.remove();
+        toast(error.message || "Lost track of the upload.", "error");
+        return null;
+      }
+      if (latest.status === "processing") {
+        paintUploadCard(card, latest);
+        continue;
+      }
+      card.remove();
+      await refreshCourse();
+      if (latest.status === "failed") {
+        toast(latest.error_message || "That file could not be read.", "error");
+        return latest;
+      }
+      const warnings = (latest.extraction_warnings || []).join(" ");
+      toast(
+        `${plural(latest.word_count, "word")} from ${latest.filename} - ${plural(
+          state.topics.length,
+          "topic"
+        )} in this course.${warnings ? ` ${warnings}` : ""}`,
+        "success"
+      );
+      if (state.tab === "materials") navigate(`#/course/${state.course.id}/topics`);
+      return latest;
+    }
+    card.remove();
+    toast("Still processing - check this course again in a minute.", "info");
+    return null;
+  }
+
   async function uploadMaterialFile(file) {
     if (!file || !state.course) return;
-    toast(`Processing ${file.name}...`, "info", 5000);
+    const form = new FormData();
+    form.append("file", file);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const result = await api(`/documents/courses/${state.course.id}/documents`, { method: "POST", form });
-      await refreshCourse();
-      toast(result.message || "Material added.", result.document && result.document.status === "failed" ? "error" : "success");
-      if (state.tab === "materials") navigate(`#/course/${state.course.id}/topics`);
+      const result = await api(`/documents/courses/${state.course.id}/documents`, {
+        method: "POST",
+        form,
+      });
+      await trackUpload(result.document);
     } catch (error) {
       toast(error.message || "Upload failed.", "error");
     }
@@ -1595,6 +1787,14 @@
       case "add-material":
         event.preventDefault();
         openAddMaterial();
+        return;
+      case "edit-course":
+        event.preventDefault();
+        openEditCourse();
+        return;
+      case "delete-course":
+        event.preventDefault();
+        deleteCourse();
         return;
       case "paste-notes":
         event.preventDefault();
