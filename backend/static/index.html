@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Study Companion</title>
+  <meta name="description" content="Turn your lecture notes into a topic map, a study plan and a coach that won't spoon-feed answers." />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <!-- ------------------------------------------------------------- signed out -->
+  <section id="auth-view" class="auth-view" hidden>
+    <div class="auth-panel">
+      <div class="brand">
+        <span class="brand-mark">SC</span>
+        <span class="brand-name">Study Companion</span>
+      </div>
+
+      <h1>Turn lecture notes into a study plan you'll actually finish.</h1>
+      <p class="auth-lede">
+        Upload the material you already have. Study Companion maps the topics, builds a
+        realistic plan around your day, and coaches you without handing over answers.
+      </p>
+
+      <ul class="auth-points">
+        <li><strong>Upload anything</strong><span>PDF, slides, Word, notes or pasted text.</span></li>
+        <li><strong>See the topic map</strong><span>Know what your course is really made of.</span></li>
+        <li><strong>Study with a coach</strong><span>Hints first. Answers second. Always your material.</span></li>
+      </ul>
+
+      <form id="auth-form" class="auth-form" novalidate>
+        <div class="field" id="auth-name-field" hidden>
+          <label for="auth-name">Name</label>
+          <input id="auth-name" type="text" autocomplete="name" placeholder="Your name" />
+        </div>
+        <div class="field">
+          <label for="auth-email">Email</label>
+          <input id="auth-email" type="email" autocomplete="email" placeholder="you@university.edu" required />
+        </div>
+        <div class="field">
+          <label for="auth-password">Password</label>
+          <input id="auth-password" type="password" autocomplete="current-password" placeholder="At least 8 characters" required />
+        </div>
+        <button class="btn btn-primary btn-block" id="auth-submit" type="submit">Create account</button>
+        <p class="form-error" id="auth-error" hidden></p>
+      </form>
+
+      <p class="auth-switch">
+        <button type="button" class="link" id="auth-toggle">Already have an account? Log in</button>
+      </p>
+
+      <div class="auth-divider"><span>or</span></div>
+      <button class="btn btn-ghost btn-block" id="guest-btn" type="button">Continue as a guest</button>
+      <p class="fineprint">Guest sessions need no email and keep everything in this browser.</p>
+    </div>
+
+    <div class="auth-art" aria-hidden="true">
+      <div class="art-glow"></div>
+      <div class="art-card art-card-1">
+        <div class="art-label">Topic map</div>
+        <div class="art-row"><span class="dot dot-violet"></span><span class="art-bar w-80"></span></div>
+        <div class="art-row"><span class="dot dot-cyan"></span><span class="art-bar w-60"></span></div>
+        <div class="art-row"><span class="dot dot-amber"></span><span class="art-bar w-70"></span></div>
+        <div class="art-row"><span class="dot dot-emerald"></span><span class="art-bar w-45"></span></div>
+      </div>
+      <div class="art-card art-card-2">
+        <div class="art-label">Today · 55 min</div>
+        <div class="art-task"><span class="art-check"></span><span class="art-bar w-70"></span></div>
+        <div class="art-task"><span class="art-check"></span><span class="art-bar w-55"></span></div>
+        <div class="art-task art-task-muted"><span class="art-check"></span><span class="art-bar w-60"></span></div>
+      </div>
+      <div class="art-card art-card-3">
+        <div class="art-label">Coach</div>
+        <p class="art-quote">What changes if the active site is blocked?</p>
+        <div class="art-hint">Nudge · level 1</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------------------------------------------------------- signed in -->
+  <div id="shell" class="shell" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand brand-compact">
+        <span class="brand-mark">SC</span>
+        <span class="brand-name">Study Companion</span>
+      </div>
+
+      <nav class="side-nav" aria-label="Main">
+        <button class="nav-item" data-route="dashboard">
+          <span class="nav-icon" data-icon="grid"></span><span>Today</span>
+        </button>
+        <button class="nav-item" data-route="settings">
+          <span class="nav-icon" data-icon="settings"></span><span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="side-section">
+        <div class="side-section-head">
+          <span>Courses</span>
+          <button class="icon-btn small" id="new-course-btn" title="New course" data-icon="plus"></button>
+        </div>
+        <div class="course-nav" id="course-nav"></div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="btn btn-primary btn-block" id="new-course-btn-2">
+          <span class="nav-icon" data-icon="plus"></span> New course
+        </button>
+        <button class="user-chip" id="user-chip" title="Settings"></button>
+      </div>
+    </aside>
+
+    <div class="main-wrap">
+      <header class="topbar">
+        <button class="icon-btn" id="menu-btn" aria-label="Toggle menu" data-icon="menu"></button>
+        <div class="topbar-title" id="topbar-title"></div>
+        <div class="topbar-actions" id="topbar-actions"></div>
+      </header>
+      <main class="view" id="view"></main>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
