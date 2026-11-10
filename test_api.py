@@ -136,6 +136,34 @@ def coach_plan() -> str:
     return f"{len(plan.items)} tasks, {plan.note}"
 
 
+def ocr_fallback() -> str:
+    """A PDF with no text layer should come back through OCR."""
+    import tempfile
+    from pathlib import Path
+
+    from PIL import Image, ImageDraw
+
+    from app.services import ocr
+    from app.services.document_processor import DocumentProcessor
+
+    if not ocr.available():
+        return "skipped - no OCR engine installed (pip install rapidocr-onnxruntime)"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        image = Image.new("RGB", (1200, 600), "white")
+        draw = ImageDraw.Draw(image)
+        draw.text((60, 60), "Enzyme Kinetics", fill="black", font_size=40)
+        draw.text((60, 140), "Enzymes lower the activation energy of a reaction.", fill="black", font_size=32)
+        draw.text((60, 210), "The active site binds the substrate.", fill="black", font_size=32)
+        pdf_path = Path(tmp) / "scan.pdf"
+        image.save(pdf_path, "PDF", resolution=150)
+
+        result = DocumentProcessor.extract(pdf_path, "scan.pdf", "application/pdf")
+        assert result.word_count >= 8, f"OCR produced too little text: {result.text!r}"
+        assert any("OCR" in warning for warning in result.warnings), result.warnings
+        return f"{result.word_count} words recovered with {ocr.engine_name()}"
+
+
 def models() -> str:
     from app.models import User
 
@@ -160,6 +188,7 @@ for name, fn in [
     ("Schema validation", schemas),
     ("Topic mapping", topic_map),
     ("Study plan (rules)", coach_plan),
+    ("OCR fallback", ocr_fallback),
     ("Models", models),
 ]:
     check(name, fn)

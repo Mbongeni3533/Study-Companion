@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -253,7 +254,10 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="The uploaded file is empty.")
 
     try:
-        extraction = DocumentProcessor.extract(destination, filename, file.content_type)
+        # Extraction (and OCR for scans) is CPU bound - keep the event loop free.
+        extraction = await run_in_threadpool(
+            DocumentProcessor.extract, destination, filename, file.content_type
+        )
     except ExtractionError as exc:
         document = Document(
             id=generate_document_id(),

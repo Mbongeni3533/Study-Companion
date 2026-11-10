@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     data_dir: Path = BACKEND_DIR / "data"
     max_file_size_mb: int = 50
 
+    # --- OCR for scanned PDFs and images (optional deps, see requirements.txt) ---
+    ocr_enabled: bool = True
+    ocr_max_pages: int = 25
+    ocr_dpi: int = 150
+
     # --- Study defaults ---
     default_daily_study_minutes: int = 60
 

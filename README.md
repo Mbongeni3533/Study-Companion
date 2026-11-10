@@ -12,6 +12,8 @@ and plan quality.
 ## What it does
 
 1. **Upload material** — PDF, DOCX, PPTX, TXT, Markdown, CSV, HTML or pasted notes.
+   Scanned (image-only) PDFs and photos are read with OCR when no text layer is
+   found, so a photocopied handout still produces topics (see *OCR* below).
 2. **Topic mapping** — headings first, keyword clustering second; each topic gets
    a summary, key terms, difficulty (1–5) and a share of the course.
 3. **Study plan** — tasks (read / practice / quiz / review) spread across days
@@ -152,6 +154,7 @@ cd backend
 
 - [x] Auth: accounts, login, anonymous sessions, profile + study goal
 - [x] Courses, uploads, extraction (PDF/DOCX/PPTX/text/HTML), chunking
+- [x] OCR fallback for scanned PDFs and image uploads (`OCR_ENABLED`, `OCR_MAX_PAGES`)
 - [x] Topic mapping with difficulty, keywords and weights
 - [x] Plan generation and task tracking with study logs
 - [x] Coach: retrieval, graduated hints, quizzes, flashcards, summaries

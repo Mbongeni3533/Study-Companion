@@ -11,7 +11,12 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..config import get_settings
 from ..utils.text import clean_text, split_sentences, words
+from . import ocr
+
+#: Below this many words a PDF is treated as scanned and sent through OCR.
+MIN_PDF_TEXT_WORDS = 25
 
 TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".text", ".rst", ".csv", ".json", ".log"}
 HTML_EXTENSIONS = {".html", ".htm"}
@@ -74,11 +79,25 @@ def _read_pdf(path: Path) -> ExtractionResult:
         if text.strip():
             parts.append(text.strip())
 
-    if not parts:
-        warnings.append(
-            "No selectable text found - this looks like a scanned PDF. OCR is not enabled."
-        )
-    return ExtractionResult(text="\n\n".join(parts), page_count=len(pages), warnings=warnings)
+    text = "\n\n".join(parts)
+
+    # A scan carries no text layer, so fall back to OCR when the extracted text
+    # is too thin to build topics from.
+    if len(words(text)) < MIN_PDF_TEXT_WORDS:
+        settings = get_settings()
+        if not settings.ocr_enabled:
+            warnings.append(
+                "No selectable text found - this looks like a scanned PDF and OCR is disabled."
+            )
+        else:
+            ocr_text, ocr_warnings, _ = ocr.ocr_pdf(
+                path, max_pages=settings.ocr_max_pages, dpi=settings.ocr_dpi
+            )
+            warnings.extend(ocr_warnings)
+            if ocr_text:
+                text = ocr_text if not text.strip() else f"{text}\n\n{ocr_text}"
+
+    return ExtractionResult(text=text, page_count=len(pages), warnings=warnings)
 
 
 def _read_docx(path: Path) -> ExtractionResult:
@@ -156,23 +175,38 @@ def _read_html(path: Path) -> ExtractionResult:
 
 
 def _read_image(path: Path) -> ExtractionResult:
-    warnings = [
-        "Image uploaded without OCR - text will not be indexed. Upload a PDF or text file for study material."
-    ]
+    settings = get_settings()
+    if not settings.ocr_enabled:
+        return ExtractionResult(
+            text="",
+            warnings=["OCR is disabled, so this image could not be read as text."],
+        )
     try:
-        import pytesseract  # type: ignore
         from PIL import Image
-    except Exception:  # noqa: BLE001 - OCR is optional
-        return ExtractionResult(text="", warnings=warnings)
 
-    try:
-        text = pytesseract.image_to_string(Image.open(str(path)))
-    except Exception:  # noqa: BLE001
-        return ExtractionResult(text="", warnings=warnings)
+        with Image.open(str(path)) as image:
+            text = ocr.ocr_image(image.convert("RGB"))
+    except Exception as exc:  # noqa: BLE001 - OCR is optional
+        return ExtractionResult(text="", warnings=[f"Could not read image: {exc}"])
 
+    engine = ocr.engine_name()
     if not text.strip():
-        return ExtractionResult(text="", warnings=warnings)
-    return ExtractionResult(text=text, warnings=["Text recovered from image with OCR."])
+        if engine is None:
+            return ExtractionResult(
+                text="",
+                warnings=[
+                    "No OCR engine is installed, so this image was not read. "
+                    "Install one with: pip install rapidocr-onnxruntime"
+                ],
+            )
+        return ExtractionResult(
+            text="",
+            warnings=[f"OCR ({engine}) found no readable text in this image."],
+        )
+    return ExtractionResult(
+        text=text,
+        warnings=[f"Text recovered from image with OCR ({engine})."],
+    )
 
 
 class DocumentProcessor:
