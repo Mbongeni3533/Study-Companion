@@ -20,3 +20,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.log
+
+# Local packaging / screenshots
+study-companion-app.zip
+artifacts/
