@@ -169,6 +169,20 @@ docker build -f Dockerfile.prod -t study-companion .
 docker run -d -p 8000:8000 -v study_data:/app/data --env-file .env study-companion
 ```
 
+## Deploy to Oracle Cloud Always Free
+
+For a zero-cost beta on a full VM with persistent storage, follow
+[`deploy/oracle-cloud/README.md`](deploy/oracle-cloud/README.md). It ships a
+Docker Compose stack with Caddy for automatic HTTPS, a persistent data volume
+for SQLite and uploads, and an environment template.
+
+```bash
+cd deploy/oracle-cloud
+cp .env.example .env   # set DEPLOY_DOMAIN, JWT_SECRET, BETA_ADMIN_KEY
+# edit .env, then
+docker compose up -d --build
+```
+
 ## Deploy to Fly.io
 
 The repository ships a `fly.toml` that runs the app from its `Dockerfile` on a
