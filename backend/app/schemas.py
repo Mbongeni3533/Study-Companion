@@ -104,6 +104,7 @@ class Token(BaseModel):
 class AccessPolicy(BaseModel):
     beta_invite_only: bool
     allow_anonymous_sessions: bool
+    registration_doc_url: str | None = None
 
 
 class InviteCodeCreate(BaseModel):

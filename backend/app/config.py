@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     beta_invite_codes: str = ""
     # Shared secret for the beta admin endpoints (X-Admin-Key header).
     beta_admin_key: str = ""
+    # Optional public Google Doc with beta registration and feedback instructions.
+    registration_doc_url: str = "https://docs.google.com/document/d/1PWpMViVx-JaVEbgsMR84oROHmxXr9YPHoqL3qpT5qnM/edit"
 
     # --- Email delivery for beta invites (Resend) ---
     resend_api_key: str | None = None

@@ -133,6 +133,7 @@ def access_policy() -> AccessPolicy:
     return AccessPolicy(
         beta_invite_only=settings.beta_invite_only,
         allow_anonymous_sessions=settings.allow_anonymous_sessions,
+        registration_doc_url=settings.registration_doc_url or None,
     )
 
 

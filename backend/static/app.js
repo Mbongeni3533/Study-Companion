@@ -55,6 +55,7 @@
     progress: null,
     chat: { sessionId: null, topicId: null, messages: [], hintLevel: 1, sending: false },
     loading: false,
+    registrationDocUrl: null,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -593,6 +594,7 @@
             <span class="user-chip-text"><span class="user-chip-name">Toolbox & resources</span><span class="user-chip-role">CVs, letters, humanizer, integrity checks, counselling and the Student Resources Centre.</span></span>
           </div>
         </div>
+        ${state.registrationDocUrl ? `<div class="row" style="margin-top:12px;"><a class="btn btn-ghost btn-sm" href="${esc(state.registrationDocUrl)}" target="_blank" rel="noopener">Beta registration &amp; feedback guide</a></div>` : ""}
       </section>
 
       <div class="stat-grid">
@@ -2365,9 +2367,25 @@
     });
   }
 
+  async function loadAccessPolicy() {
+    try {
+      const policy = await api("/auth/access-policy", { auth: false });
+      state.registrationDocUrl = policy.registration_doc_url || null;
+    } catch {
+      state.registrationDocUrl = null;
+    }
+    const wrap = $("#registration-doc-wrap");
+    const link = $("#registration-doc-link");
+    if (wrap && link && state.registrationDocUrl) {
+      link.href = state.registrationDocUrl;
+      wrap.hidden = false;
+    }
+  }
+
   async function boot() {
     hydrateIcons();
     setAuthMode("register");
+    await loadAccessPolicy();
     const saved = loadSession();
     if (!saved || !saved.token) {
       showAuth();
