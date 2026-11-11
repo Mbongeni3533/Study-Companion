@@ -200,6 +200,10 @@
   }
 
   function closeModal() {
+    if (window.__studyDictation) {
+      try { window.__studyDictation.stop(); } catch (e) { /* ignore */ }
+      window.__studyDictation = null;
+    }
     $("#modal-root").innerHTML = "";
     activeModal = null;
   }
@@ -916,9 +920,10 @@
             <div class="dropzone-sub">Lecture slides, readings, your own notes</div>
             <input type="file" id="file-input" accept=".pdf,.docx,.pptx,.txt,.md,.markdown,.csv,.html,.htm,.png,.jpg,.jpeg,.webp" />
           </div>
-          <div class="row" style="margin-top:12px;">
+          <div class="row" style="margin-top:12px;gap:8px;flex-wrap:wrap;">
             <span class="small muted">No file handy?</span>
             <button class="btn btn-ghost btn-sm" data-action="paste-notes">Paste notes instead</button>
+            <button class="btn btn-ghost btn-sm" data-action="dictate-notes">Read aloud</button>
           </div>
         </section>
 
@@ -1613,6 +1618,10 @@
           <div class="field">
             <textarea id="modal-notes" placeholder="Paste lecture notes, a summary or a set of definitions (at least 20 words)..." style="min-height:110px;"></textarea>
           </div>
+          <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+            <button type="button" class="btn btn-ghost btn-sm" id="modal-dictate">Read aloud</button>
+            <span class="small muted" id="modal-dictate-status">Use your microphone to dictate notes.</span>
+          </div>
           <p class="form-error" id="material-error" hidden></p>
         </div>
         <div class="modal-foot">
@@ -1668,6 +1677,62 @@
         showFile();
       }
     });
+
+    // Dictation: turn spoken notes into text using the browser's SpeechRecognition.
+    const dictateButton = $("#modal-dictate");
+    const dictateStatus = $("#modal-dictate-status");
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      dictateButton.disabled = true;
+      dictateStatus.textContent = "Speech recognition is not supported in this browser.";
+    } else {
+      let recognition = null;
+      let listening = false;
+      let baseText = "";
+      dictateButton.addEventListener("click", () => {
+        if (listening && recognition) {
+          recognition.stop();
+          return;
+        }
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = (navigator.language || "en-US").replace(/_/g, "-");
+        baseText = $("#modal-notes").value.trim();
+        recognition.onstart = () => {
+          listening = true;
+          dictateButton.textContent = "Stop recording";
+          dictateStatus.textContent = "Listening... speak your notes.";
+        };
+        recognition.onresult = (event) => {
+          let finalText = baseText ? `${baseText} ` : "";
+          let interim = "";
+          for (let i = 0; i < event.results.length; i += 1) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) finalText += `${transcript} `;
+            else interim += transcript;
+          }
+          $("#modal-notes").value = `${finalText}${interim}`.trim();
+        };
+        recognition.onerror = (event) => {
+          dictateStatus.textContent = `Speech recognition error: ${event.error || "unknown"}.`;
+        };
+        recognition.onend = () => {
+          listening = false;
+          dictateButton.textContent = "Read aloud";
+          const notes = $("#modal-notes").value.trim();
+          dictateStatus.textContent = notes ? "Transcript added. Review and upload." : "No speech detected.";
+          window.__studyDictation = null;
+          recognition = null;
+        };
+        window.__studyDictation = recognition;
+        try {
+          recognition.start();
+        } catch (error) {
+          dictateStatus.textContent = error.message || "Could not start speech recognition.";
+        }
+      });
+    }
 
     $("#material-form").addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -2061,6 +2126,11 @@
       case "paste-notes":
         event.preventDefault();
         openPasteNotes();
+        return;
+      case "dictate-notes":
+        event.preventDefault();
+        openAddMaterial();
+        setTimeout(() => $("#modal-dictate")?.click(), 120);
         return;
       case "pick-file":
         event.preventDefault();
