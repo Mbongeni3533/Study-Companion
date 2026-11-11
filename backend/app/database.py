@@ -28,7 +28,7 @@ def _build_engine() -> Engine:
         # Supabase's transaction pooler (PgBouncer) can lose server-side
         # prepared statements between checkouts. Disable them so the app is
         # safe with both pooled and direct Postgres connections.
-        connect_args["prepare_threshold"] = 0
+        connect_args["prepare_threshold"] = None
 
     engine = create_engine(
         settings.sqlalchemy_url,
