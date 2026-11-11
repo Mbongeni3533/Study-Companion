@@ -10,7 +10,9 @@ processed; extracted text and chunks are stored in Postgres.
 Use one of these instead of Render's free Postgres, which expires after 30 days:
 
 - **Neon** — create a project and copy the connection string.
-- **Supabase** — create a project and copy the direct Postgres connection string.
+- **Supabase** — create a project and copy the connection string from **Connect**.
+  Use the pooler connection (port `6543`) if Render cannot reach the direct
+  database host.
 
 The connection string should look like:
 
@@ -19,7 +21,9 @@ postgresql://USER:PASSWORD@HOST:5432/DATABASE?sslmode=require
 ```
 
 The app accepts `postgresql://` or `postgres://` and normalizes it to the
-psycopg 3 driver automatically.
+psycopg 3 driver automatically. Supabase strings already include
+`?sslmode=require`; the app also disables prepared statements so Supabase's
+transaction pooler works safely.
 
 If your password contains special characters, URL-encode it.
 
@@ -55,6 +59,15 @@ Expected:
 ```json
 {"status":"ok","app":"Study Companion API","version":"0.2.0","ai_provider":"rules","database":"ok"}
 ```
+
+## Optional: enable invite emails
+
+Invite links work without email. To send them from the admin page, add these
+variables in the Render service's **Environment** tab:
+
+- `RESEND_API_KEY` — your Resend API key
+- `RESEND_FROM_EMAIL` — a verified sender, for example
+  `Study Companion <invites@yourdomain.com>`
 
 ## 4. Create invitation links
 

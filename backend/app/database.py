@@ -24,6 +24,11 @@ def _build_engine() -> Engine:
     connect_args: dict[str, object] = {}
     if settings.is_sqlite:
         connect_args["check_same_thread"] = False
+    elif settings.sqlalchemy_url.startswith("postgresql+psycopg"):
+        # Supabase's transaction pooler (PgBouncer) can lose server-side
+        # prepared statements between checkouts. Disable them so the app is
+        # safe with both pooled and direct Postgres connections.
+        connect_args["prepare_threshold"] = 0
 
     engine = create_engine(
         settings.sqlalchemy_url,
