@@ -2382,9 +2382,18 @@
     }
   }
 
+  function applyInviteFromUrl() {
+    const code = new URLSearchParams(window.location.search).get("invite");
+    if (!code) return;
+    setAuthMode("register");
+    const field = $("#auth-invite-code");
+    if (field) field.value = code.trim();
+  }
+
   async function boot() {
     hydrateIcons();
     setAuthMode("register");
+    applyInviteFromUrl();
     await loadAccessPolicy();
     const saved = loadSession();
     if (!saved || !saved.token) {

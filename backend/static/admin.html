@@ -40,6 +40,34 @@
       <section class="card">
         <div class="card-head">
           <div>
+            <h2>Invitation links</h2>
+            <p class="card-sub">Create a code and send the link to a student's email. The signup page fills in the code automatically.</p>
+          </div>
+          <div class="card-head-actions">
+            <button class="btn btn-ghost btn-sm" type="button" id="invite-refresh">Refresh</button>
+          </div>
+        </div>
+        <form id="invite-form" class="admin-form">
+          <div class="field">
+            <label for="invite-email">Student email (optional)</label>
+            <input id="invite-email" type="email" autocomplete="off" placeholder="student@university.edu" />
+          </div>
+          <div class="field" style="flex:0 1 150px;">
+            <label for="invite-uses">Max uses</label>
+            <input id="invite-uses" type="number" min="1" max="1000" value="1" />
+          </div>
+          <button class="btn btn-primary" type="submit" id="invite-create">Create invite link</button>
+        </form>
+        <p class="admin-error" id="invite-error" hidden></p>
+        <p class="small muted" id="invite-status" style="margin-top:10px;"></p>
+        <div id="admin-invites" class="admin-table-wrap" style="margin-top:14px;">
+          <div class="admin-empty">Enter the admin key to see invitation links.</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
             <h2>Feedback</h2>
             <p class="card-sub" id="admin-count">Enter the admin key to load feedback.</p>
           </div>
