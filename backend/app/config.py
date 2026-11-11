@@ -84,7 +84,16 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_url(self) -> str:
         if self.database_url:
-            return self.database_url
+            # SQLAlchemy's default ``postgresql://`` dialect expects psycopg2;
+            # this project installs psycopg 3, whose dialect is
+            # ``postgresql+psycopg://``. Accept the URL formats providers such as
+            # Neon and Supabase hand out and normalize them here.
+            url = self.database_url.strip()
+            if url.startswith("postgres://"):
+                return "postgresql+psycopg://" + url[len("postgres://") :]
+            if url.startswith("postgresql://"):
+                return "postgresql+psycopg://" + url[len("postgresql://") :]
+            return url
         return f"sqlite:///{self.data_dir / 'study_companion.db'}"
 
     @property

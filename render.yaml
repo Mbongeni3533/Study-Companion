@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: study-companion
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BETA_ADMIN_KEY
+        generateValue: true
+      - key: BETA_INVITE_ONLY
+        value: "true"
+      - key: ALLOW_ANONYMOUS_SESSIONS
+        value: "false"
+      - key: DATA_DIR
+        value: /tmp/study-companion
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: MAX_FILE_SIZE_MB
+        value: "25"
+      - key: OCR_ENABLED
+        value: "false"

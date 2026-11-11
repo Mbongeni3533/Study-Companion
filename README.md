@@ -169,6 +169,15 @@ docker build -f Dockerfile.prod -t study-companion .
 docker run -d -p 8000:8000 -v study_data:/app/data --env-file .env study-companion
 ```
 
+## Deploy to Render
+
+Render's free web service gives the quickest public beta URL. Because its free
+filesystem is ephemeral, the Blueprint uses an external Postgres database
+(Neon or Supabase) instead of SQLite. See
+[`deploy/render/README.md`](deploy/render/README.md).
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
 ## Deploy to Oracle Cloud Always Free
 
 For a zero-cost beta on a full VM with persistent storage, follow
