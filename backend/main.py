@@ -94,7 +94,7 @@ async def revalidate_static(request: Request, call_next):
     the UI silently runs old code against a new API.
     """
     response = await call_next(request)
-    if request.url.path.startswith("/static/") or request.url.path in {"/", "/favicon.ico"}:
+    if request.url.path.startswith("/static/") or request.url.path in {"/", "/admin", "/favicon.ico"}:
         # Never clobber a stricter value set by the handler (the shell uses no-store).
         response.headers.setdefault("Cache-Control", "no-cache, must-revalidate")
     return response
@@ -132,6 +132,15 @@ if STATIC_DIR.exists():
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
         return FileResponse(STATIC_DIR / "favicon.svg", media_type="image/svg+xml")
+
+    @app.get("/admin", include_in_schema=False)
+    def admin_dashboard() -> FileResponse:
+        """Protected-by-key feedback dashboard for the operator."""
+        return FileResponse(
+            STATIC_DIR / "admin.html",
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def manifest() -> FileResponse:

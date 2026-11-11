@@ -139,6 +139,8 @@ class FeedbackCreate(BaseModel):
 class FeedbackResponse(ORMModel):
     id: int
     user_id: str | None = None
+    user_email: str | None = None
+    user_name: str | None = None
     course_id: str | None = None
     rating: int | None = None
     category: str

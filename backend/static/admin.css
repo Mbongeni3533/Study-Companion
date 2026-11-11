@@ -1,0 +1,65 @@
+.admin-body { min-height: 100vh; }
+
+.admin-wrap {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 44px) clamp(16px, 4vw, 36px) 72px;
+}
+
+.admin-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.admin-head h1 { font-size: clamp(24px, 3vw, 32px); margin-top: 2px; }
+.admin-head .sub { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+
+.admin-grid { display: grid; gap: 18px; }
+
+.admin-form { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.admin-form .field { flex: 1 1 260px; }
+.admin-form .btn { min-height: 42px; }
+
+.admin-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+.admin-table { width: 100%; border-collapse: collapse; min-width: 780px; }
+.admin-table th,
+.admin-table td {
+  padding: 11px 13px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  font-size: 13px;
+}
+.admin-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: rgba(148, 163, 184, 0.06);
+  white-space: nowrap;
+}
+.admin-table tbody tr:last-child td { border-bottom: 0; }
+.admin-table tbody tr:hover { background: rgba(148, 163, 184, 0.04); }
+.admin-user { display: grid; gap: 1px; min-width: 170px; }
+.admin-user strong { font-weight: 600; }
+.admin-user span { color: var(--muted); font-size: 12px; }
+.admin-message { min-width: 260px; max-width: 480px; white-space: pre-wrap; line-height: 1.5; }
+.admin-page { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-dim); }
+.admin-date { white-space: nowrap; color: var(--text-dim); }
+.admin-empty { padding: 38px 20px; text-align: center; color: var(--muted); }
+
+.admin-error {
+  margin-top: 12px;
+  color: #ffb4b4;
+  background: rgba(251, 113, 133, 0.1);
+  border: 1px solid rgba(251, 113, 133, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  font-size: 13.5px;
+}
+
+@media (max-width: 700px) {
+  .admin-table { min-width: 640px; }
+}

@@ -80,4 +80,11 @@ def list_feedback(
     rows = db.scalars(
         select(Feedback).order_by(Feedback.created_at.desc()).offset(offset).limit(limit)
     ).all()
-    return [FeedbackResponse.model_validate(row) for row in rows]
+    result: list[FeedbackResponse] = []
+    for row in rows:
+        item = FeedbackResponse.model_validate(row)
+        if row.user is not None:
+            item.user_email = row.user.email
+            item.user_name = row.user.name
+        result.append(item)
+    return result
