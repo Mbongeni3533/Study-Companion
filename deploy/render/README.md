@@ -78,9 +78,14 @@ variables in the Render service's **Environment** tab:
    ```
 
 2. Copy `BETA_ADMIN_KEY` from the Render service's **Environment** tab.
-3. Enter it on the admin page.
-4. Under **Invitation links**, create and copy a link.
+3. Enter it once and click **Sign in**. The key is exchanged for a secure
+   HttpOnly session cookie, so you only enter the student's email after that.
+4. Under **Invitation links**, enter the student's email and click
+   **Create invite link**.
 5. Send the link to the beta group.
+
+Use **Forget key** to end the admin session. Rotating `BETA_ADMIN_KEY`
+invalidates existing admin sessions automatically.
 
 ## Free-tier limits to know
 

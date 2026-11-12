@@ -10,7 +10,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,18 +21,62 @@ import logging
 from ..models import InviteCode
 from ..schemas import InviteCodeCreate, InviteCodeResponse
 from ..services.email import send_invite_email
+from ..utils.auth import create_admin_session_token, decode_admin_session_token
 
 logger = logging.getLogger("study_companion.admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+ADMIN_SESSION_COOKIE = "admin_session"
+ADMIN_SESSION_MINUTES = 60 * 24 * 7
 
-def _require_admin(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")) -> None:
+
+def _admin_cookie_secure() -> bool:
+    return get_settings().environment.strip().lower() == "production"
+
+
+def _require_admin(
+    x_admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    admin_session: str | None = Cookie(default=None, alias=ADMIN_SESSION_COOKIE),
+) -> None:
     settings = get_settings()
-    if not settings.beta_admin_key or not x_admin_key:
+    if not settings.beta_admin_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access disabled.")
-    if x_admin_key != settings.beta_admin_key:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key.")
+    if x_admin_key and secrets.compare_digest(x_admin_key, settings.beta_admin_key):
+        return
+    if admin_session and decode_admin_session_token(admin_session):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key.")
+
+
+@router.post("/session", status_code=status.HTTP_204_NO_CONTENT)
+def create_admin_session(response: Response, _: None = Depends(_require_admin)) -> None:
+    """Exchange the admin key for a short-lived HttpOnly session cookie."""
+    response.set_cookie(
+        key=ADMIN_SESSION_COOKIE,
+        value=create_admin_session_token(ADMIN_SESSION_MINUTES),
+        max_age=ADMIN_SESSION_MINUTES * 60,
+        httponly=True,
+        secure=_admin_cookie_secure(),
+        samesite="strict",
+        path="/",
+    )
+
+
+@router.get("/session")
+def admin_session_status(_: None = Depends(_require_admin)) -> dict[str, bool]:
+    return {"authenticated": True}
+
+
+@router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
+def delete_admin_session(response: Response) -> None:
+    response.delete_cookie(
+        key=ADMIN_SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        secure=_admin_cookie_secure(),
+        samesite="strict",
+    )
 
 
 @router.get("/invite-codes", response_model=list[InviteCodeResponse])

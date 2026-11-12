@@ -1,8 +1,15 @@
 (() => {
   "use strict";
 
-  const KEY_STORAGE = "study-companion.admin-key";
+  const SESSION_PATH = "/admin/session";
   const $ = (selector) => document.querySelector(selector);
+
+  // Remove the admin key left by older builds; sessions now use HttpOnly cookies.
+  try {
+    sessionStorage.removeItem("study-companion.admin-key");
+  } catch {
+    // Storage can be unavailable in privacy-restricted browsers.
+  }
 
   const esc = (value) =>
     String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -143,16 +150,15 @@
   }
 
   async function loadInvites() {
-    const key = $("#admin-key").value.trim();
-    if (!key) {
-      showInviteError("Enter the admin key.");
-      return;
-    }
     showInviteError("");
     try {
       const response = await fetch("/admin/invite-codes", {
-        headers: { "X-Admin-Key": key },
+        credentials: "same-origin",
       });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
       renderInvites(Array.isArray(data) ? data : []);
@@ -164,12 +170,6 @@
 
   async function createInvite(event) {
     event.preventDefault();
-    const key = $("#admin-key").value.trim();
-    if (!key) {
-      showInviteError("Enter the admin key.");
-      $("#admin-key").focus();
-      return;
-    }
     const email = $("#invite-email").value.trim();
     const maxUses = Number($("#invite-uses").value) || 1;
     const button = $("#invite-create");
@@ -181,9 +181,14 @@
     try {
       const response = await fetch("/admin/invite-codes", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Admin-Key": key },
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ email: email || null, max_uses: maxUses, send_email: false }),
       });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
       $("#invite-email").value = "";
@@ -198,23 +203,18 @@
   }
 
   async function loadFeedback() {
-    const input = $("#admin-key");
-    const key = input.value.trim();
-    if (!key) {
-      showError("Enter the admin key.");
-      input.focus();
-      return;
-    }
-    sessionStorage.setItem(KEY_STORAGE, key);
-    showError("");
-    const button = $("#admin-load");
+    const button = $("#admin-refresh");
     const original = button.textContent;
     button.disabled = true;
     button.textContent = "Loading...";
     try {
       const response = await fetch("/feedback?limit=200", {
-        headers: { "X-Admin-Key": key },
+        credentials: "same-origin",
       });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
       const data = await response.json().catch(() => null);
       if (!response.ok) {
         throw new Error((data && data.detail) || `Request failed (${response.status})`);
@@ -230,29 +230,89 @@
     }
   }
 
-  $("#admin-key-form").addEventListener("submit", (event) => {
-    event.preventDefault();
-    loadFeedback();
-    loadInvites();
-  });
+  async function openAdmin() {
+    $("#admin-login").hidden = true;
+    $("#admin-session").hidden = false;
+    $("#admin-content").hidden = false;
+    showError("");
+    await Promise.all([loadFeedback(), loadInvites()]);
+  }
 
+  function showLogin(message = "") {
+    $("#admin-login").hidden = false;
+    $("#admin-session").hidden = true;
+    $("#admin-content").hidden = true;
+    $("#admin-key").value = "";
+    showError(message);
+    $("#admin-key").focus();
+  }
+
+  async function signIn(event) {
+    event.preventDefault();
+    const input = $("#admin-key");
+    const key = input.value.trim();
+    if (!key) {
+      showError("Enter the admin key.");
+      input.focus();
+      return;
+    }
+    const button = $("#admin-load");
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Signing in...";
+    showError("");
+    try {
+      const response = await fetch(SESSION_PATH, {
+        method: "POST",
+        headers: { "X-Admin-Key": key },
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error((data && data.detail) || "Invalid admin key.");
+      }
+      input.value = "";
+      await openAdmin();
+    } catch (error) {
+      showError(error.message || "Could not sign in.");
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  async function signOut() {
+    try {
+      await fetch(SESSION_PATH, { method: "DELETE", credentials: "same-origin" });
+    } finally {
+      showLogin();
+    }
+  }
+
+  async function checkSession() {
+    try {
+      const response = await fetch(SESSION_PATH, { credentials: "same-origin" });
+      if (response.ok) {
+        await openAdmin();
+      } else {
+        showLogin();
+      }
+    } catch {
+      showLogin();
+    }
+  }
+
+  $("#admin-key-form").addEventListener("submit", signIn);
   $("#admin-refresh").addEventListener("click", loadFeedback);
   $("#invite-refresh").addEventListener("click", loadInvites);
   $("#invite-form").addEventListener("submit", createInvite);
+  $("#admin-signout").addEventListener("click", signOut);
 
   $("#admin-clear").addEventListener("click", () => {
-    sessionStorage.removeItem(KEY_STORAGE);
     $("#admin-key").value = "";
     $("#admin-key").focus();
     showError("");
-    $("#admin-count").textContent = "Enter the admin key to load feedback.";
-    $("#admin-table").innerHTML = '<div class="admin-empty">No feedback loaded yet.</div>';
   });
 
-  const saved = sessionStorage.getItem(KEY_STORAGE);
-  if (saved) {
-    $("#admin-key").value = saved;
-    loadFeedback();
-    loadInvites();
-  }
+  checkSession();
 })();

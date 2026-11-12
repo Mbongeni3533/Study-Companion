@@ -13,26 +13,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..config import get_settings
 from ..database import get_db
 from ..models import Course, Feedback, User
 from ..schemas import FeedbackCreate, FeedbackResponse
 from ..utils.deps import get_current_user
+from .admin import _require_admin
 
 logger = logging.getLogger("study_companion.feedback")
 
 router = APIRouter(prefix="/feedback", tags=["feedback"])
-
-
-from fastapi import Header
-
-
-def require_admin(x_admin_key: str | None = Header(default=None, alias="X-Admin-Key")) -> None:
-    settings = get_settings()
-    if not settings.beta_admin_key or not x_admin_key:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access disabled.")
-    if x_admin_key != settings.beta_admin_key:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key.")
 
 
 @router.post("", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
@@ -74,7 +63,7 @@ def submit_feedback(
 def list_feedback(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
-    _: None = Depends(require_admin),
+    _: None = Depends(_require_admin),
     db: Session = Depends(get_db),
 ) -> list[FeedbackResponse]:
     rows = db.scalars(

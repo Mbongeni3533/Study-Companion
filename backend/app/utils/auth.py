@@ -117,3 +117,36 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except jwt.PyJWTError:
         return None
+
+
+def _admin_key_fingerprint() -> str:
+    """Bind an admin session to the current admin key without storing the key."""
+    settings = get_settings()
+    return hashlib.sha256(settings.beta_admin_key.encode("utf-8")).hexdigest()
+
+
+def create_admin_session_token(expires_minutes: int = 60 * 24 * 7) -> str:
+    settings = get_settings()
+    issued = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": "admin",
+        "iat": int(issued.timestamp()),
+        "exp": int((issued + timedelta(minutes=expires_minutes)).timestamp()),
+        "typ": "admin",
+        "ak": _admin_key_fingerprint(),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_admin_session_token(token: str) -> bool:
+    payload = decode_access_token(token)
+    if not payload:
+        return False
+    expected = _admin_key_fingerprint()
+    token_fingerprint = payload.get("ak")
+    return (
+        payload.get("typ") == "admin"
+        and payload.get("sub") == "admin"
+        and isinstance(token_fingerprint, str)
+        and hmac.compare_digest(token_fingerprint, expected)
+    )
