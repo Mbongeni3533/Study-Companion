@@ -1193,16 +1193,6 @@
     });
   }
 
-  function announceCopy(message) {
-    const status = $("rc-copy-status");
-    if (!status) return;
-    clearTimeout(status._copyAnnounceTimer);
-    status.textContent = "";
-    status._copyAnnounceTimer = setTimeout(() => {
-      status.textContent = message;
-    }, 80);
-  }
-
   function bindDocumentOnce() {
     if (documentBound) return;
     documentBound = true;
@@ -1212,16 +1202,22 @@
       if (!planButton) return;
       const planText = $(planButton.dataset.copyPlan);
       if (!planText) return;
-      try {
-        await navigator.clipboard.writeText(planText.textContent);
-        planButton.textContent = "Copied";
-        announceCopy("Business plan copied to clipboard.");
-      } catch (error) {
+      const originalLabel = planButton.dataset.copyLabel || planButton.textContent.trim();
+      const copied = await window.StudyCopy.write(planText.textContent, {
+        button: planButton,
+        status: $("rc-copy-status"),
+        message: "Business plan copied to clipboard.",
+      });
+      if (!copied) {
         // clipboard can be blocked; reveal the text so it can be selected by hand
+        planButton.dataset.copyLabel = originalLabel;
         planText.hidden = false;
         planButton.textContent = "Select the text below";
+        clearTimeout(planButton._copyTimer);
+        planButton._copyTimer = setTimeout(() => {
+          planButton.textContent = originalLabel;
+        }, 2500);
       }
-      setTimeout(() => (planButton.textContent = "Copy plan"), 2500);
     });
 
     document.addEventListener("click", (event) => {
@@ -1294,18 +1290,23 @@
       if (!button) return;
       const source = $(button.dataset.copy);
       if (!source) return;
-      try {
-        await navigator.clipboard.writeText(source.textContent);
-        button.textContent = "Copied";
-        announceCopy(
+      const originalLabel = button.dataset.copyLabel || button.textContent.trim();
+      const copied = await window.StudyCopy.write(source.textContent, {
+        button,
+        status: $("rc-copy-status"),
+        message:
           button.dataset.copy === "supervisor-email"
             ? "Supervisor email copied to clipboard."
-            : "Text copied to clipboard."
-        );
-      } catch (error) {
+            : "Text copied to clipboard.",
+      });
+      if (!copied) {
+        button.dataset.copyLabel = originalLabel;
         button.textContent = "Select and copy";
+        clearTimeout(button._copyTimer);
+        button._copyTimer = setTimeout(() => {
+          button.textContent = originalLabel;
+        }, 2000);
       }
-      setTimeout(() => (button.textContent = "Copy"), 2000);
     });
   }
 

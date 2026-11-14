@@ -36,6 +36,7 @@ def asset_version() -> str:
     for name in (
         "app.js",
         "styles.css",
+        "copy.js",
         "resources.js",
         "resources.css",
         "thesis-agent.js",

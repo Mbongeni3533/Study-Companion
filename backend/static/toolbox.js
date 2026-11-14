@@ -147,42 +147,13 @@
   }
 
   /* ---------------------------------------------------------------- helpers */
-  function showCopied(button) {
-    if (!button) return;
-    if (!button.dataset.copyLabel) button.dataset.copyLabel = button.textContent.trim();
-    clearTimeout(button._copyTimer);
-    button.textContent = "Copied";
-    button.classList.add("is-copied");
-    button._copyTimer = setTimeout(() => {
-      button.textContent = button.dataset.copyLabel;
-      button.classList.remove("is-copied");
-    }, 1800);
-  }
-
-  async function copyText(text, button = null) {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast("Copied to clipboard.", "success");
-    } catch {
-      const area = document.createElement("textarea");
-      area.value = text;
-      document.body.appendChild(area);
-      area.select();
-      document.execCommand("copy");
-      area.remove();
-      toast("Copied.", "success");
-    }
-    showCopied(button);
-  }
-
-  function announceCopy(container, message) {
-    const status = $("#tb-copy-status", container);
-    if (!status) return;
-    clearTimeout(status._copyAnnounceTimer);
-    status.textContent = "";
-    status._copyAnnounceTimer = setTimeout(() => {
-      status.textContent = message;
-    }, 80);
+  async function copyText(text, button = null, status = null, message = "") {
+    const copied = await window.StudyCopy.write(text, { button, status, message });
+    toast(
+      copied ? "Copied to clipboard." : "Could not copy. Select the text and copy it manually.",
+      copied ? "success" : "error"
+    );
+    return copied;
   }
 
   async function downloadCvPdf(button) {
@@ -875,9 +846,12 @@
         toast("Replaced your text with the rewrite.", "success");
       });
       output.querySelector('[data-copy="humanized"]').addEventListener("click", (event) => {
-        copyText(result.text, event.currentTarget)
-          .then(() => announceCopy(container, "Humanized text copied to clipboard."))
-          .catch(() => {});
+        copyText(
+          result.text,
+          event.currentTarget,
+          $("#tb-copy-status", container),
+          "Humanized text copied to clipboard."
+        );
       });
     } catch (error) {
       toast(error.message, "error");
@@ -1278,22 +1252,21 @@
       }
       const copyRaw = event.target.closest("[data-copy-raw]");
       if (copyRaw) {
-        copyText($("#tb-cv-raw", container).textContent, copyRaw)
-          .then(() => announceCopy(container, "Extracted CV text copied to clipboard."))
-          .catch(() => {});
+        copyText(
+          $("#tb-cv-raw", container).textContent,
+          copyRaw,
+          $("#tb-copy-status", container),
+          "Extracted CV text copied to clipboard."
+        );
         return;
       }
       const copy = event.target.closest("[data-copy]");
       if (copy) {
         if (copy.dataset.copy === "cv") {
-          copyText(docs.cv, copy)
-            .then(() => announceCopy(container, "CV copied to clipboard."))
-            .catch(() => {});
+          copyText(docs.cv, copy, $("#tb-copy-status", container), "CV copied to clipboard.");
         }
         if (copy.dataset.copy === "letter") {
-          copyText(docs.letter, copy)
-            .then(() => announceCopy(container, "Letter copied to clipboard."))
-            .catch(() => {});
+          copyText(docs.letter, copy, $("#tb-copy-status", container), "Letter copied to clipboard.");
         }
         return;
       }

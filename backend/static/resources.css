@@ -1122,6 +1122,13 @@
 .rc-scope .advisor__copy:hover { background: rgba(52, 211, 153, 0.14); }
 .rc-scope .advisor__copy:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 
+.rc-scope .copy.is-copied,
+.rc-scope .advisor__copy.is-copied {
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.16);
+  border-color: rgba(52, 211, 153, 0.55);
+}
+
 .rc-scope .advisor__plan-text {
   margin: 1rem 0 0;
   padding: 0.9rem 1rem;

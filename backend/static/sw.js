@@ -3,6 +3,7 @@ const SHELL_ASSETS = [
   "/",
   "/static/styles.css",
   "/static/app.js",
+  "/static/copy.js",
   "/static/resources.js",
   "/static/toolbox.js",
   "/static/assessment.js",
