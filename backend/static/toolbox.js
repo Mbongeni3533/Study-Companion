@@ -175,13 +175,13 @@
     showCopied(button);
   }
 
-  function announceRawCopied(container) {
-    const status = $("#tb-cv-copy-status", container);
+  function announceCopy(container, message) {
+    const status = $("#tb-copy-status", container);
     if (!status) return;
     clearTimeout(status._copyAnnounceTimer);
     status.textContent = "";
     status._copyAnnounceTimer = setTimeout(() => {
-      status.textContent = "Extracted CV text copied to clipboard.";
+      status.textContent = message;
     }, 80);
   }
 
@@ -320,7 +320,6 @@
                   </div>
                   <p class="tb-import-raw-note">Formatting and multi-column layouts can be lost during extraction, so check each field against the original CV.</p>
                   <pre id="tb-cv-raw" tabindex="0" aria-label="Extracted CV text"></pre>
-                  <p class="tb-sr-only" id="tb-cv-copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
                 </details>
               </div>
 
@@ -497,6 +496,7 @@
           </div>
         </section>
       </div>
+      <p class="tb-sr-only" id="tb-copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
     </div>`;
 
   /* ------------------------------------------------------------------ state */
@@ -874,9 +874,11 @@
         $("#tb-hz-input", container).value = result.text;
         toast("Replaced your text with the rewrite.", "success");
       });
-      output.querySelector('[data-copy="humanized"]').addEventListener("click", (event) =>
+      output.querySelector('[data-copy="humanized"]').addEventListener("click", (event) => {
         copyText(result.text, event.currentTarget)
-      );
+          .then(() => announceCopy(container, "Humanized text copied to clipboard."))
+          .catch(() => {});
+      });
     } catch (error) {
       toast(error.message, "error");
     } finally {
@@ -1277,14 +1279,22 @@
       const copyRaw = event.target.closest("[data-copy-raw]");
       if (copyRaw) {
         copyText($("#tb-cv-raw", container).textContent, copyRaw)
-          .then(() => announceRawCopied(container))
+          .then(() => announceCopy(container, "Extracted CV text copied to clipboard."))
           .catch(() => {});
         return;
       }
       const copy = event.target.closest("[data-copy]");
       if (copy) {
-        if (copy.dataset.copy === "cv") copyText(docs.cv, copy);
-        if (copy.dataset.copy === "letter") copyText(docs.letter, copy);
+        if (copy.dataset.copy === "cv") {
+          copyText(docs.cv, copy)
+            .then(() => announceCopy(container, "CV copied to clipboard."))
+            .catch(() => {});
+        }
+        if (copy.dataset.copy === "letter") {
+          copyText(docs.letter, copy)
+            .then(() => announceCopy(container, "Letter copied to clipboard."))
+            .catch(() => {});
+        }
         return;
       }
       const download = event.target.closest("[data-download]");
