@@ -23,24 +23,6 @@
 
   const inviteLink = (code) => `${window.location.origin}/?invite=${encodeURIComponent(code)}`;
 
-  async function copyText(text) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch {
-      const area = document.createElement("textarea");
-      area.value = text;
-      area.style.position = "fixed";
-      area.style.opacity = "0";
-      document.body.appendChild(area);
-      area.select();
-      let ok = false;
-      try { ok = document.execCommand("copy"); } catch { ok = false; }
-      area.remove();
-      return ok;
-    }
-  }
-
   function showInviteError(message) {
     const node = $("#invite-error");
     node.hidden = !message;
@@ -143,8 +125,14 @@
       </table>`;
     host.querySelectorAll("[data-copy]").forEach((button) => {
       button.addEventListener("click", async () => {
-        const ok = await copyText(button.dataset.copy);
-        showInviteStatus(ok ? "Invite link copied." : "Could not copy. Select the link manually.", ok);
+        const status = $("#invite-status");
+        const copied = await window.StudyCopy.write(button.dataset.copy, {
+          button,
+          status,
+          message: "Invite link copied.",
+        });
+        status.classList.toggle("admin-status-ok", copied);
+        if (!copied) status.textContent = "Could not copy. Select the link manually.";
       });
     });
   }

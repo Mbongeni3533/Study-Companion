@@ -71,7 +71,7 @@
           <button class="btn btn-primary" type="submit" id="invite-create">Create invite link</button>
         </form>
         <p class="admin-error" id="invite-error" hidden></p>
-        <p class="small muted" id="invite-status" style="margin-top:10px;"></p>
+        <p class="small muted" id="invite-status" role="status" aria-live="polite" aria-atomic="true" style="margin-top:10px;"></p>
         <div id="admin-invites" class="admin-table-wrap" style="margin-top:14px;">
           <div class="admin-empty">Enter the admin key to see invitation links.</div>
         </div>
@@ -93,6 +93,7 @@
       </section>
     </div>
   </main>
+  <script src="/static/copy.js"></script>
   <script src="/static/admin.js"></script>
 </body>
 </html>

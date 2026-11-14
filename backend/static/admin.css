@@ -52,6 +52,11 @@
 .admin-page { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-dim); }
 .admin-link { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
 .admin-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.admin-actions .btn.is-copied {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.08);
+  color: var(--emerald);
+}
 .admin-status-ok { color: var(--emerald); }
 .admin-date { white-space: nowrap; color: var(--text-dim); }
 .admin-empty { padding: 38px 20px; text-align: center; color: var(--muted); }
