@@ -291,6 +291,10 @@
                 <p class="tb-import-status" id="tb-cv-import-status" role="status"></p>
                 <details class="tb-import-raw" id="tb-cv-raw-wrap" hidden>
                   <summary>View extracted text</summary>
+                  <div class="tb-import-raw-bar">
+                    <span>Extracted from your file</span>
+                    <button type="button" class="btn btn-ghost btn-sm" data-copy-raw>Copy text</button>
+                  </div>
                   <pre id="tb-cv-raw" tabindex="0" aria-label="Extracted CV text"></pre>
                 </details>
               </div>
@@ -1241,6 +1245,11 @@
       const pdf = event.target.closest("[data-pdf=\"cv\"]");
       if (pdf) {
         downloadCvPdf(pdf);
+        return;
+      }
+      const copyRaw = event.target.closest("[data-copy-raw]");
+      if (copyRaw) {
+        copyText($("#tb-cv-raw", container).textContent);
         return;
       }
       const copy = event.target.closest("[data-copy]");

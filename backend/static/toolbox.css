@@ -227,10 +227,20 @@
   content: "\2212";
 }
 
+.tb-import-raw-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
 .tb-import-raw pre {
   max-height: 280px;
   overflow: auto;
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
