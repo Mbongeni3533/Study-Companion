@@ -201,6 +201,7 @@
           <p class="muted" id="doc-source"></p>
         </div>
       </dialog>
+      <p class="sr-only" id="rc-copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
     </div>`;
 
   /* ------------------------------------------------------------------- tabs */
@@ -1192,6 +1193,16 @@
     });
   }
 
+  function announceCopy(message) {
+    const status = $("rc-copy-status");
+    if (!status) return;
+    clearTimeout(status._copyAnnounceTimer);
+    status.textContent = "";
+    status._copyAnnounceTimer = setTimeout(() => {
+      status.textContent = message;
+    }, 80);
+  }
+
   function bindDocumentOnce() {
     if (documentBound) return;
     documentBound = true;
@@ -1204,6 +1215,7 @@
       try {
         await navigator.clipboard.writeText(planText.textContent);
         planButton.textContent = "Copied";
+        announceCopy("Business plan copied to clipboard.");
       } catch (error) {
         // clipboard can be blocked; reveal the text so it can be selected by hand
         planText.hidden = false;
@@ -1285,6 +1297,11 @@
       try {
         await navigator.clipboard.writeText(source.textContent);
         button.textContent = "Copied";
+        announceCopy(
+          button.dataset.copy === "supervisor-email"
+            ? "Supervisor email copied to clipboard."
+            : "Text copied to clipboard."
+        );
       } catch (error) {
         button.textContent = "Select and copy";
       }
