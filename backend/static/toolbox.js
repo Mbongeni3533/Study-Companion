@@ -1268,8 +1268,8 @@
       }
       const copy = event.target.closest("[data-copy]");
       if (copy) {
-        if (copy.dataset.copy === "cv") copyText(docs.cv);
-        if (copy.dataset.copy === "letter") copyText(docs.letter);
+        if (copy.dataset.copy === "cv") copyText(docs.cv, copy);
+        if (copy.dataset.copy === "letter") copyText(docs.letter, copy);
         return;
       }
       const download = event.target.closest("[data-download]");
