@@ -237,6 +237,13 @@
   font-size: 12.5px;
 }
 
+.tb-import-raw-note {
+  margin: 8px 0 0;
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .tb-import-raw pre {
   max-height: 280px;
   overflow: auto;

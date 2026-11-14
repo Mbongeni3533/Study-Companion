@@ -295,6 +295,7 @@
                     <span>Extracted from your file</span>
                     <button type="button" class="btn btn-ghost btn-sm" data-copy-raw>Copy text</button>
                   </div>
+                  <p class="tb-import-raw-note">Formatting and multi-column layouts can be lost during extraction, so check each field against the original CV.</p>
                   <pre id="tb-cv-raw" tabindex="0" aria-label="Extracted CV text"></pre>
                 </details>
               </div>
