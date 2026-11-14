@@ -521,6 +521,48 @@ class CVPDFRequest(BaseModel):
     full_name: str | None = Field(default=None, max_length=120)
 
 
+class CVImportFields(BaseModel):
+    """Fields found in an uploaded CV. Anything uncertain is left empty."""
+
+    profession: str | None = Field(default=None, max_length=120)
+    full_name: str | None = Field(default=None, max_length=120)
+    email: str | None = Field(default=None, max_length=200)
+    phone: str | None = Field(default=None, max_length=60)
+    location: str | None = Field(default=None, max_length=120)
+    target_role: str | None = Field(default=None, max_length=160)
+    years_experience: int | None = Field(default=None, ge=0, le=60)
+    skills: list[str] = Field(default_factory=list)
+    experience: list[ExperienceItem] = Field(default_factory=list)
+    education: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    achievements: list[str] = Field(default_factory=list)
+
+    @field_validator("skills", mode="before")
+    @classmethod
+    def _clean_skills(cls, value):
+        if not value:
+            return []
+        if isinstance(value, str):
+            value = value.split(",")
+        return [str(item).strip() for item in value if str(item).strip()][:24]
+
+    @field_validator("education", "certifications", "achievements", mode="before")
+    @classmethod
+    def _clean_lines(cls, value):
+        if not value:
+            return []
+        if isinstance(value, str):
+            value = value.splitlines()
+        return [str(line).strip(" -•\t") for line in value if str(line).strip(" -•\t")][:10]
+
+
+class CVImportResult(BaseModel):
+    filename: str
+    text: str
+    fields: CVImportFields
+    warnings: list[str] = Field(default_factory=list)
+
+
 class LetterRequest(BaseModel):
     kind: Literal["cover_letter", "email"] = "cover_letter"
     profession: str = Field(min_length=2, max_length=120)

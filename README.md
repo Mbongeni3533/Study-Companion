@@ -28,7 +28,8 @@ and plan quality.
    country, a document library, and a thesis-writing agent. Content ships with
    the app as JSON, so it needs no key, no database and no second website.
 7. **Toolbox** — a section for the work around studying: a profession-aware CV
-   agent (downloadable as a styled A4 PDF or Markdown), cover letters and
+   agent (import an existing PDF/DOCX/TXT CV, edit the extracted fields,
+   download a styled A4 PDF or Markdown), cover letters and
    application emails, a humanizer that strips clichés
    and machine phrasing (listing every change), an integrity check for copied
    text and uncited quotes, and counselling sessions you can book. Writing
@@ -274,6 +275,7 @@ fly ssh console -C "chown -R appuser:appuser /app/data"
 | `GET` | `/resources/library/{slug}` | One library document, rendered client-side |
 | `GET` | `/resources/library/{slug}/download` | The same document as `text/markdown` |
 | `GET` | `/toolbox/meta` | Agents, tones, professions, counsellors |
+| `POST` | `/toolbox/cv/import` | Extract fields from an uploaded PDF/DOCX/TXT CV |
 | `POST` | `/toolbox/cv` | Build a CV from profile, profession and experience |
 | `POST` | `/toolbox/cv/pdf` | Render the CV Markdown as a styled A4 PDF |
 | `POST` | `/toolbox/letters` | Cover letter or application email |
@@ -328,7 +330,7 @@ cd backend
 - [x] Plan generation and task tracking with study logs
 - [x] Coach: retrieval, graduated hints, quizzes, flashcards, summaries
 - [x] Progress: minutes, streaks, per-topic mastery, exam readiness
-- [x] Toolbox: CV and letter agents, humanizer, integrity check, counselling bookings
+- [x] Toolbox: CV import and builder, letter agents, humanizer, integrity check, counselling bookings
 - [x] Thinking check: a short, plain-English pre-assessment that sets how the coach explains and pushes
 - [x] Bundled responsive web client
 - [ ] Expo mobile client

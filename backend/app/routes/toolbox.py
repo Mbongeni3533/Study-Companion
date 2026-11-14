@@ -8,16 +8,21 @@ from __future__ import annotations
 
 import logging
 import re
+import tempfile
 from datetime import date, datetime, time, timezone
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..database import get_db
 from ..models import Chunk, CounsellingSession, Document, User, as_utc
 from ..schemas import (
+    CVImportFields,
+    CVImportResult,
     CVPDFRequest,
     CVRequest,
     CVResult,
@@ -38,7 +43,9 @@ from ..schemas import (
 )
 import httpx
 
+from ..services.cv_import import parse_cv_text
 from ..services.cv_pdf import render_cv_pdf
+from ..services.document_processor import DocumentProcessor, ExtractionError
 from ..services.toolbox import (
     check_integrity,
     get_agents,
@@ -56,6 +63,9 @@ router = APIRouter(prefix="/toolbox", tags=["toolbox"])
 DURATION_MINUTES = 30
 #: Cap the library scan so a huge course cannot stall the request.
 MAX_PASSAGES = 400
+#: CVs are small; a tighter limit than the general document library.
+CV_IMPORT_MAX_BYTES = 10 * 1024 * 1024
+CV_IMPORT_EXTENSIONS = frozenset({".pdf", ".docx", ".txt", ".md", ".markdown", ".text"})
 
 
 def _counsellors() -> list[dict[str, Any]]:
@@ -141,6 +151,64 @@ async def build_cv(payload: CVRequest, user: User = Depends(get_current_user)) -
         data["email"] = user.email
     result = await get_agents().cv(data)
     return CVResult(**result)
+
+
+@router.post("/cv/import", response_model=CVImportResult)
+async def import_cv(
+    file: UploadFile = File(...), user: User = Depends(get_current_user)
+) -> CVImportResult:
+    """Read an existing CV and return fields for the builder to prefill.
+
+    The file is temporary: it is parsed and deleted, never stored in the library.
+    """
+    del user  # authentication only; the import is not saved against the account
+    filename = Path(file.filename or "cv").name
+    suffix = Path(filename).suffix.lower()
+    if suffix not in CV_IMPORT_EXTENSIONS:
+        raise HTTPException(status_code=400, detail="Upload a PDF, DOCX, TXT or Markdown CV")
+
+    raw = await file.read(CV_IMPORT_MAX_BYTES + 1)
+    if len(raw) > CV_IMPORT_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="That CV is too large - the limit is 10 MB")
+    if not raw:
+        raise HTTPException(status_code=400, detail="That file is empty")
+
+    settings = get_settings()
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
+    temporary = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.upload_dir)
+    temp_path = Path(temporary.name)
+    try:
+        try:
+            temporary.write(raw)
+        finally:
+            temporary.close()
+        extraction = DocumentProcessor.extract(temp_path, filename, file.content_type)
+    except ExtractionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - report a readable import failure
+        logger.exception("CV import extraction failed")
+        raise HTTPException(
+            status_code=400, detail="Could not read that CV - try a text-based PDF or DOCX"
+        ) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+    if len(extraction.text.split()) < 10:
+        raise HTTPException(
+            status_code=400, detail="That file does not contain enough readable text to import"
+        )
+
+    fields = CVImportFields(**parse_cv_text(extraction.text))
+    warnings = list(extraction.warnings)
+    warnings.append(
+        "CV layouts vary, so check every imported field before building - some details may have landed in the wrong box."
+    )
+    return CVImportResult(
+        filename=filename,
+        text=extraction.text[:60000],
+        fields=fields,
+        warnings=warnings,
+    )
 
 
 @router.post(

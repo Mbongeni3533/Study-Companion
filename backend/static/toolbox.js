@@ -42,16 +42,23 @@
   }
 
   async function api(path, options = {}) {
-    const { method = "GET", body } = options;
+    const { method = "GET", body, form } = options;
     const headers = { Accept: "application/json" };
     const bearer = token();
     if (bearer) headers.Authorization = `Bearer ${bearer}`;
-    if (body !== undefined) headers["Content-Type"] = "application/json";
+
+    let payload;
+    if (form) {
+      payload = form;
+    } else if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      payload = JSON.stringify(body);
+    }
 
     const response = await fetch(API + path, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: payload,
     });
     const text = await response.text();
     let data = null;
@@ -272,6 +279,16 @@
               <div class="tb-card-head">
                 <h2>CV builder</h2>
                 <p>Fill what you have. The agent fills the structure; it never invents a job or a date.</p>
+              </div>
+
+              <div class="tb-import">
+                <div class="tb-import-copy">
+                  <h3>Have a CV already?</h3>
+                  <p>Upload a PDF, DOCX, TXT or Markdown file. We'll pull the details into this form so you can edit them before rebuilding.</p>
+                </div>
+                <input id="tb-cv-file" type="file" accept=".pdf,.docx,.txt,.md,.markdown,.text" hidden />
+                <button type="button" class="btn btn-ghost btn-sm" id="tb-cv-upload">Choose CV file</button>
+                <p class="tb-import-status" id="tb-cv-import-status" role="status"></p>
               </div>
 
               <div class="tb-row2">
@@ -608,6 +625,96 @@
       toast(error.message, "error");
     } finally {
       restore();
+    }
+  }
+
+  function applyImportedCV(container, fields) {
+    const setValue = (selector, value) => {
+      if (value === null || value === undefined || value === "") return;
+      const input = $(selector, container);
+      if (input) input.value = value;
+    };
+
+    setValue("#tb-cv-profession", fields.profession);
+    setValue("#tb-cv-name", fields.full_name);
+    setValue("#tb-cv-email", fields.email);
+    setValue("#tb-cv-phone", fields.phone);
+    setValue("#tb-cv-location", fields.location);
+    setValue("#tb-cv-target", fields.target_role);
+    if (fields.years_experience !== null && fields.years_experience !== undefined) {
+      setValue("#tb-cv-years", String(fields.years_experience));
+    }
+    if (Array.isArray(fields.skills) && fields.skills.length) {
+      setValue("#tb-cv-skills", fields.skills.join(", "));
+    }
+    if (Array.isArray(fields.education) && fields.education.length) {
+      setValue("#tb-cv-education", fields.education.join("\n"));
+    }
+    if (Array.isArray(fields.certifications) && fields.certifications.length) {
+      setValue("#tb-cv-certifications", fields.certifications.join("\n"));
+    }
+    if (Array.isArray(fields.achievements) && fields.achievements.length) {
+      setValue("#tb-cv-achievements", fields.achievements.join("\n"));
+    }
+    if (Array.isArray(fields.experience) && fields.experience.length) {
+      const expHost = $("#tb-cv-exp", container);
+      expHost.innerHTML = "";
+      fields.experience.forEach((item) => {
+        expHost.appendChild(
+          experienceRow({
+            role: item.role,
+            organisation: item.organisation,
+            period: item.period,
+            highlights: (item.highlights || []).join("\n"),
+          })
+        );
+      });
+    }
+
+    const profession = $("#tb-cv-profession", container);
+    if (!profession.value.trim()) profession.value = fields.profession || "Student";
+  }
+
+  async function importCV(container) {
+    const input = $("#tb-cv-file", container);
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const button = $("#tb-cv-upload", container);
+    const status = $("#tb-cv-import-status", container);
+    const restore = busy(button, "Reading…");
+    status.className = "tb-import-status";
+    status.textContent = `Reading ${file.name}…`;
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const result = await api("/cv/import", { method: "POST", form });
+      const fields = result.fields || {};
+      applyImportedCV(container, fields);
+      // Do not leave a previous draft's preview or download attached to a new CV.
+      docs.cv = "";
+      cvFullName = "";
+      $("#tb-cv-output", container).innerHTML = `
+        <div class="tb-card-head"><h2>Your CV</h2><p>Markdown you can paste anywhere.</p></div>
+        <div class="tb-placeholder"><p>CV imported. Check the fields on the left, then build your CV.</p></div>`;
+
+      const found = [];
+      if (fields.experience && fields.experience.length) {
+        found.push(`${fields.experience.length} role${fields.experience.length === 1 ? "" : "s"}`);
+      }
+      if (fields.skills && fields.skills.length) {
+        found.push(`${fields.skills.length} skill${fields.skills.length === 1 ? "" : "s"}`);
+      }
+      status.className = "tb-import-status success";
+      status.textContent = `Imported ${file.name}${found.length ? ` - found ${found.join(" and ")}` : ""}. Check the fields, then build.`;
+      toast("CV imported. Check the fields before building.", "success");
+    } catch (error) {
+      status.className = "tb-import-status error";
+      status.textContent = error.message;
+      toast(error.message, "error");
+    } finally {
+      restore();
+      input.value = "";
     }
   }
 
@@ -1061,6 +1168,9 @@
     expHost.appendChild(experienceRow());
 
     $("#tb-add-exp", container).addEventListener("click", () => expHost.appendChild(experienceRow()));
+    const cvFile = $("#tb-cv-file", container);
+    $("#tb-cv-upload", container).addEventListener("click", () => cvFile.click());
+    cvFile.addEventListener("change", () => importCV(container));
     expHost.addEventListener("click", (event) => {
       const remove = event.target.closest("[data-remove-exp]");
       if (!remove) return;
