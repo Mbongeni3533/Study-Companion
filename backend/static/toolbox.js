@@ -289,6 +289,10 @@
                 <input id="tb-cv-file" type="file" accept=".pdf,.docx,.txt,.md,.markdown,.text" hidden />
                 <button type="button" class="btn btn-ghost btn-sm" id="tb-cv-upload">Choose CV file</button>
                 <p class="tb-import-status" id="tb-cv-import-status" role="status"></p>
+                <details class="tb-import-raw" id="tb-cv-raw-wrap" hidden>
+                  <summary>View extracted text</summary>
+                  <pre id="tb-cv-raw" tabindex="0" aria-label="Extracted CV text"></pre>
+                </details>
               </div>
 
               <div class="tb-row2">
@@ -682,15 +686,25 @@
 
     const button = $("#tb-cv-upload", container);
     const status = $("#tb-cv-import-status", container);
+    const rawWrap = $("#tb-cv-raw-wrap", container);
+    const raw = $("#tb-cv-raw", container);
     const restore = busy(button, "Reading…");
     status.className = "tb-import-status";
     status.textContent = `Reading ${file.name}…`;
+    rawWrap.hidden = true;
+    rawWrap.open = false;
+    raw.textContent = "";
     try {
       const form = new FormData();
       form.append("file", file);
       const result = await api("/cv/import", { method: "POST", form });
       const fields = result.fields || {};
       applyImportedCV(container, fields);
+      if (result.text) {
+        raw.textContent = result.text;
+        rawWrap.hidden = false;
+        rawWrap.open = false;
+      }
       // Do not leave a previous draft's preview or download attached to a new CV.
       docs.cv = "";
       cvFullName = "";
