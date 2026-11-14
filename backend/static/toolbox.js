@@ -175,6 +175,16 @@
     showCopied(button);
   }
 
+  function announceRawCopied(container) {
+    const status = $("#tb-cv-copy-status", container);
+    if (!status) return;
+    clearTimeout(status._copyAnnounceTimer);
+    status.textContent = "";
+    status._copyAnnounceTimer = setTimeout(() => {
+      status.textContent = "Extracted CV text copied to clipboard.";
+    }, 80);
+  }
+
   async function downloadCvPdf(button) {
     if (!docs.cv) {
       toast("Generate a CV first.", "error");
@@ -310,6 +320,7 @@
                   </div>
                   <p class="tb-import-raw-note">Formatting and multi-column layouts can be lost during extraction, so check each field against the original CV.</p>
                   <pre id="tb-cv-raw" tabindex="0" aria-label="Extracted CV text"></pre>
+                  <p class="tb-sr-only" id="tb-cv-copy-status" role="status" aria-live="polite" aria-atomic="true"></p>
                 </details>
               </div>
 
@@ -1263,7 +1274,9 @@
       }
       const copyRaw = event.target.closest("[data-copy-raw]");
       if (copyRaw) {
-        copyText($("#tb-cv-raw", container).textContent, copyRaw);
+        copyText($("#tb-cv-raw", container).textContent, copyRaw)
+          .then(() => announceRawCopied(container))
+          .catch(() => {});
         return;
       }
       const copy = event.target.closest("[data-copy]");
