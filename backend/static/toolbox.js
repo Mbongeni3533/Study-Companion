@@ -147,7 +147,19 @@
   }
 
   /* ---------------------------------------------------------------- helpers */
-  async function copyText(text) {
+  function showCopied(button) {
+    if (!button) return;
+    if (!button.dataset.copyLabel) button.dataset.copyLabel = button.textContent.trim();
+    clearTimeout(button._copyTimer);
+    button.textContent = "Copied";
+    button.classList.add("is-copied");
+    button._copyTimer = setTimeout(() => {
+      button.textContent = button.dataset.copyLabel;
+      button.classList.remove("is-copied");
+    }, 1800);
+  }
+
+  async function copyText(text, button = null) {
     try {
       await navigator.clipboard.writeText(text);
       toast("Copied to clipboard.", "success");
@@ -160,6 +172,7 @@
       area.remove();
       toast("Copied.", "success");
     }
+    showCopied(button);
   }
 
   async function downloadCvPdf(button) {
@@ -1250,7 +1263,7 @@
       }
       const copyRaw = event.target.closest("[data-copy-raw]");
       if (copyRaw) {
-        copyText($("#tb-cv-raw", container).textContent);
+        copyText($("#tb-cv-raw", container).textContent, copyRaw);
         return;
       }
       const copy = event.target.closest("[data-copy]");
