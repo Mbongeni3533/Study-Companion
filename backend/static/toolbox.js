@@ -874,7 +874,9 @@
         $("#tb-hz-input", container).value = result.text;
         toast("Replaced your text with the rewrite.", "success");
       });
-      output.querySelector('[data-copy="humanized"]').addEventListener("click", () => copyText(result.text));
+      output.querySelector('[data-copy="humanized"]').addEventListener("click", (event) =>
+        copyText(result.text, event.currentTarget)
+      );
     } catch (error) {
       toast(error.message, "error");
     } finally {
