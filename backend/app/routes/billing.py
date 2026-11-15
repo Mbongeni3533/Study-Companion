@@ -10,7 +10,7 @@ import secrets
 import time
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,10 @@ from ..schemas import (
     SubscriptionHistoryItem,
     SubscriptionHistoryResponse,
     UserResponse,
+)
+from ..services.email import (
+    send_billing_details_updated_email,
+    send_subscription_cancelled_email,
 )
 from ..services.payment_service import PaymentService
 from ..services.subscriber_agent import record_subscriber_event
@@ -47,6 +51,9 @@ STRIPE_HISTORY = {
     "customer.subscription.deleted": ("cancellation", "Stripe subscription ended", "Stripe cancelled your recurring subscription."),
     "invoice.paid": ("billing", "Invoice paid", "Your latest subscription invoice was paid."),
     "invoice.payment_failed": ("billing", "Invoice payment failed", "Stripe could not charge your latest invoice."),
+    "customer.updated": ("billing", "Billing details updated", "Your payment or billing details were updated."),
+    "payment_method.attached": ("billing", "Payment method added", "A payment method was added to your billing profile."),
+    "payment_method.detached": ("billing", "Payment method removed", "A payment method was removed from your billing profile."),
 }
 
 
@@ -73,12 +80,32 @@ def _activate_user(
         record_subscriber_event(db, user, "subscribed", "subscribed", detail)
 
 
-def _deactivate_user(db: Session, user: User, detail: str) -> None:
+def _deactivate_user(db: Session, user: User, detail: str) -> bool:
     already_pending = user.subscription_status == "pending" and user.subscription_tier == "free"
     user.subscription_status = "pending"
     user.subscription_tier = "free"
     if not already_pending:
         record_subscriber_event(db, user, "subscription_ended", "pending", detail)
+        return True
+    return False
+
+
+def _settings_url() -> str:
+    return f"{get_settings().public_app_url.rstrip('/')}/#/settings"
+
+
+def _send_cancellation_notice(email: str, settings_url: str) -> None:
+    try:
+        send_subscription_cancelled_email(email, settings_url)
+    except Exception as exc:  # pragma: no cover - provider/network failure
+        logger.warning("Cancellation email to %s failed: %s", email, exc)
+
+
+def _send_billing_notice(email: str, settings_url: str) -> None:
+    try:
+        send_billing_details_updated_email(email, settings_url)
+    except Exception as exc:  # pragma: no cover - provider/network failure
+        logger.warning("Billing details email to %s failed: %s", email, exc)
 
 
 def _verify_stripe_signature(payload: bytes, signature_header: str | None, secret: str) -> bool:
@@ -110,6 +137,13 @@ def _subscription_user(db: Session, obj: dict[str, Any]) -> User | None:
         user_id = obj.get("client_reference_id")
     if user_id:
         user = db.get(User, user_id)
+        if user is not None:
+            return user
+    customer_id = obj.get("customer")
+    if not customer_id and obj.get("object") == "customer":
+        customer_id = obj.get("id")
+    if customer_id:
+        user = db.scalar(select(User).where(User.stripe_customer_id == customer_id))
         if user is not None:
             return user
     subscription_id = obj.get("subscription") or obj.get("id")
@@ -262,6 +296,7 @@ def create_billing_portal(
 
 @router.post("/cancel", response_model=UserResponse)
 def cancel_beta_subscription(
+    background_tasks: BackgroundTasks,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserResponse:
@@ -275,9 +310,11 @@ def cancel_beta_subscription(
             detail="Manage this subscription in the billing portal.",
         )
 
-    _deactivate_user(db, user, "Beta subscription cancelled from Settings.")
+    changed = _deactivate_user(db, user, "Beta subscription cancelled from Settings.")
     db.commit()
     db.refresh(user)
+    if changed and user.email:
+        background_tasks.add_task(_send_cancellation_notice, user.email, _settings_url())
     return UserResponse.model_validate(user)
 
 
@@ -342,7 +379,11 @@ def confirm_checkout(
 
 
 @router.post("/webhook", include_in_schema=False)
-async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, bool]:
+async def stripe_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
     settings = get_settings()
     secret = settings.stripe_webhook_secret
     if not secret:
@@ -369,6 +410,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
 
     obj = (event.get("data") or {}).get("object") or {}
     user = _subscription_user(db, obj)
+    notify_cancelled = False
+    notify_billing = False
 
     if user is not None:
         if event_type == "checkout.session.completed":
@@ -399,9 +442,13 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
                     subscription_id=obj.get("id"),
                 )
             elif obj.get("status") in {"canceled", "unpaid", "past_due"}:
-                _deactivate_user(db, user, f"Stripe subscription is {obj.get('status')}.")
+                notify_cancelled = _deactivate_user(
+                    db, user, f"Stripe subscription is {obj.get('status')}."
+                )
         elif event_type == "customer.subscription.deleted":
-            _deactivate_user(db, user, "Stripe subscription was cancelled.")
+            notify_cancelled = _deactivate_user(db, user, "Stripe subscription was cancelled.")
+        elif event_type == "customer.updated":
+            notify_billing = user.subscription_status == "subscribed"
 
     db.add(
         BillingEvent(
@@ -411,4 +458,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
         )
     )
     db.commit()
+    if user is not None and user.email:
+        if notify_cancelled:
+            background_tasks.add_task(_send_cancellation_notice, user.email, _settings_url())
+        if notify_billing:
+            background_tasks.add_task(_send_billing_notice, user.email, _settings_url())
     return {"received": True}
