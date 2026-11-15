@@ -27,6 +27,7 @@ from ..schemas import (
     UserResponse,
 )
 from ..services.email import (
+    send_admin_subscription_event_email,
     send_billing_details_updated_email,
     send_subscription_cancelled_email,
 )
@@ -93,6 +94,35 @@ def _deactivate_user(db: Session, user: User, detail: str) -> bool:
 
 def _settings_url() -> str:
     return f"{get_settings().public_app_url.rstrip('/')}/#/settings"
+
+
+def _admin_recipients() -> list[str]:
+    return [
+        address.strip()
+        for address in get_settings().admin_notification_email.split(",")
+        if address.strip()
+    ]
+
+
+def _send_admin_notice(
+    action: str,
+    subscriber_name: str,
+    subscriber_email: str,
+    detail: str,
+) -> None:
+    admin_url = f"{get_settings().public_app_url.rstrip('/')}/admin"
+    for recipient in _admin_recipients():
+        try:
+            send_admin_subscription_event_email(
+                recipient,
+                action,
+                subscriber_name,
+                subscriber_email,
+                detail,
+                admin_url,
+            )
+        except Exception as exc:  # pragma: no cover - provider/network failure
+            logger.warning("Admin notification to %s failed: %s", recipient, exc)
 
 
 def _send_cancellation_notice(email: str, settings_url: str) -> None:
@@ -324,11 +354,20 @@ def cancel_beta_subscription(
             detail="Manage this subscription in the billing portal.",
         )
 
-    changed = _deactivate_user(db, user, "Beta subscription cancelled from Settings.")
+    detail = "Beta subscription cancelled from Settings."
+    changed = _deactivate_user(db, user, detail)
     db.commit()
     db.refresh(user)
-    if changed and user.email:
-        background_tasks.add_task(_send_cancellation_notice, user.email, _settings_url())
+    if changed:
+        if user.email:
+            background_tasks.add_task(_send_cancellation_notice, user.email, _settings_url())
+        background_tasks.add_task(
+            _send_admin_notice,
+            "cancelled their subscription",
+            user.name,
+            user.email or "",
+            detail,
+        )
     return UserResponse.model_validate(user)
 
 
@@ -426,6 +465,8 @@ async def stripe_webhook(
     user = _subscription_user(db, obj)
     notify_cancelled = False
     notify_billing = False
+    admin_action = ""
+    admin_detail = ""
 
     if user is not None:
         if event_type == "checkout.session.completed":
@@ -456,15 +497,22 @@ async def stripe_webhook(
                     subscription_id=obj.get("id"),
                 )
             elif obj.get("status") in {"canceled", "unpaid", "past_due"}:
-                notify_cancelled = _deactivate_user(
-                    db, user, f"Stripe subscription is {obj.get('status')}."
-                )
+                admin_detail = f"Stripe subscription is {obj.get('status')}."
+                notify_cancelled = _deactivate_user(db, user, admin_detail)
+                if notify_cancelled:
+                    admin_action = "lost their active subscription"
         elif event_type == "customer.subscription.deleted":
-            notify_cancelled = _deactivate_user(db, user, "Stripe subscription was cancelled.")
+            admin_detail = "Stripe subscription was cancelled."
+            notify_cancelled = _deactivate_user(db, user, admin_detail)
+            if notify_cancelled:
+                admin_action = "cancelled their subscription"
         elif event_type == "customer.updated":
             notify_billing = (
                 user.subscription_status == "subscribed" and user.billing_update_emails
             )
+            if user.subscription_status == "subscribed":
+                admin_action = "changed billing details"
+                admin_detail = "Stripe customer billing details were updated."
 
     db.add(
         BillingEvent(
@@ -474,9 +522,18 @@ async def stripe_webhook(
         )
     )
     db.commit()
-    if user is not None and user.email:
-        if notify_cancelled:
-            background_tasks.add_task(_send_cancellation_notice, user.email, _settings_url())
-        if notify_billing:
-            background_tasks.add_task(_send_billing_notice, user.email, _settings_url())
+    if user is not None:
+        if user.email:
+            if notify_cancelled:
+                background_tasks.add_task(_send_cancellation_notice, user.email, _settings_url())
+            if notify_billing:
+                background_tasks.add_task(_send_billing_notice, user.email, _settings_url())
+        if admin_action:
+            background_tasks.add_task(
+                _send_admin_notice,
+                admin_action,
+                user.name,
+                user.email or "",
+                admin_detail,
+            )
     return {"received": True}

@@ -17,6 +17,7 @@ services:
       - PUBLIC_APP_URL=${PUBLIC_APP_URL:-http://localhost:8000}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - RESEND_FROM_EMAIL=${RESEND_FROM_EMAIL:-"Study Companion <onboarding@resend.dev>"}
+      - ADMIN_NOTIFICATION_EMAIL=${ADMIN_NOTIFICATION_EMAIL}
     depends_on:
       - db
     volumes:

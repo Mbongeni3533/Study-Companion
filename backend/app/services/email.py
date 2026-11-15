@@ -6,6 +6,7 @@ Set RESEND_API_KEY and optionally RESEND_FROM_EMAIL in the environment.
 
 from __future__ import annotations
 
+import html
 import logging
 
 import httpx
@@ -75,6 +76,38 @@ def send_subscription_cancelled_email(to_email: str, settings_url: str) -> dict:
             "<p>Your account is now on the Free plan. You can reactivate at any time from Settings:</p>"
             f'<p><a href="{settings_url}">Open subscription settings</a></p>'
             "<p>If you did not request this change, reply to this email so we can help.</p>"
+        ),
+    )
+
+
+def send_admin_subscription_event_email(
+    to_email: str,
+    action: str,
+    subscriber_name: str,
+    subscriber_email: str,
+    detail: str,
+    admin_url: str,
+) -> dict:
+    safe_name = html.escape(subscriber_name or "Subscriber")
+    safe_email = html.escape(subscriber_email or "no email")
+    safe_detail = html.escape(detail)
+    safe_action = html.escape(action)
+    return _send_email(
+        to_email,
+        f"Study Companion: {action} - {subscriber_name or 'Subscriber'}",
+        (
+            f"A subscriber {action}.\n\n"
+            f"Name: {subscriber_name or 'Subscriber'}\n"
+            f"Email: {subscriber_email or 'no email'}\n"
+            f"Detail: {detail}\n\n"
+            f"Open the admin dashboard: {admin_url}\n"
+        ),
+        (
+            f"<p>A subscriber {safe_action}.</p>"
+            f"<p><strong>Name:</strong> {safe_name}<br>"
+            f"<strong>Email:</strong> {safe_email}<br>"
+            f"<strong>Detail:</strong> {safe_detail}</p>"
+            f'<p><a href="{html.escape(admin_url)}">Open the admin dashboard</a></p>'
         ),
     )
 
