@@ -19,6 +19,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -54,6 +55,8 @@ class User(TimestampMixin, Base):
     id: Mapped[str] = mapped_column(String(48), primary_key=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(120), default="Student")
+    avatar_key: Mapped[str | None] = mapped_column(String(64))
+    avatar_data: Mapped[bytes | None] = mapped_column(LargeBinary)
     university: Mapped[str | None] = mapped_column(String(200))
     # Used by the toolbox agents (CV, cover letters) to tailor their output.
     profession: Mapped[str | None] = mapped_column(String(120))
@@ -83,6 +86,12 @@ class User(TimestampMixin, Base):
     counselling_sessions: Mapped[list["CounsellingSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+
+    @property
+    def avatar_url(self) -> str | None:
+        if not self.avatar_data:
+            return None
+        return f"/auth/avatar/{self.id}?v={self.avatar_key or 'current'}"
 
 
 class BillingEvent(Base):

@@ -54,6 +54,7 @@ class UserResponse(ORMModel):
     thinking_level: str | None = None
     thinking_scores: dict[str, Any] | None = None
     assessment_completed_at: datetime | None = None
+    avatar_url: str | None = None
     is_anonymous: bool
 
     @field_validator("thinking_scores", mode="before")

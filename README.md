@@ -247,6 +247,8 @@ fly ssh console -C "chown -R appuser:appuser /app/data"
 | `POST` | `/auth/login` | Log in |
 | `POST` | `/auth/anonymous-session` | Start as a guest |
 | `GET` `PATCH` | `/auth/me` | Read / update profile and study goal |
+| `POST` `DELETE` | `/auth/me/avatar` | Upload / remove a profile picture |
+| `GET` | `/auth/avatar/{user_id}` | Profile picture image (versioned public URL) |
 | `POST` | `/documents/courses` | Create a course |
 | `GET` | `/documents/courses` | List courses with counts and readiness |
 | `GET` `PATCH` `DELETE` | `/documents/courses/{id}` | Course detail |
@@ -323,7 +325,7 @@ cd backend
 
 ## Status
 
-- [x] Auth: accounts, login, anonymous sessions, profile + study goal
+- [x] Auth: accounts, login, anonymous sessions, profile + study goal, profile pictures
 - [x] Courses, uploads, extraction (PDF/DOCX/PPTX/text/HTML), chunking
 - [x] OCR fallback for scanned PDFs and image uploads (`OCR_ENABLED`, `OCR_MAX_PAGES`)
 - [x] Topic mapping with difficulty, keywords and weights

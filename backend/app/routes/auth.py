@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import io
 from datetime import datetime, timezone
+from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -30,6 +33,10 @@ from ..utils.auth import (
 from ..utils.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+AVATAR_MAX_BYTES = 8 * 1024 * 1024
+AVATAR_SIZE = (512, 512)
+AVATAR_FORMATS = {"JPEG", "PNG", "WEBP", "GIF", "MPO"}
 
 
 def _token_for(user: User) -> Token:
@@ -195,3 +202,83 @@ def update_me(
     db.commit()
     db.refresh(user)
     return UserResponse.model_validate(user)
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Upload a profile picture, fitted to a square and stored as WebP."""
+    raw = await file.read(AVATAR_MAX_BYTES + 1)
+    if not raw:
+        raise HTTPException(status_code=400, detail="Choose a picture to upload.")
+    if len(raw) > AVATAR_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Pictures must be 8 MB or smaller.",
+        )
+
+    try:
+        with Image.open(io.BytesIO(raw)) as opened:
+            if opened.format not in AVATAR_FORMATS:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Choose a JPG, PNG, WebP or GIF picture.",
+                )
+            if opened.width * opened.height > 36_000_000:
+                raise HTTPException(
+                    status_code=400,
+                    detail="That picture has too many pixels. Try a smaller one.",
+                )
+            opened.load()
+            image = ImageOps.exif_transpose(opened)
+            if image.mode not in {"RGB", "RGBA"}:
+                image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+            picture = ImageOps.fit(image, AVATAR_SIZE, method=Image.Resampling.LANCZOS)
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="That file is not a readable picture. Choose a JPG, PNG, WebP or GIF.",
+        )
+
+    output = io.BytesIO()
+    try:
+        picture.save(output, format="WEBP", quality=88, method=6)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Could not prepare that picture. Try again.")
+
+    user.avatar_data = output.getvalue()
+    user.avatar_key = uuid4().hex
+    db.commit()
+    db.refresh(user)
+    return UserResponse.model_validate(user)
+
+
+@router.delete("/me/avatar", response_model=UserResponse)
+def remove_avatar(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    """Remove the current profile picture."""
+    user.avatar_data = None
+    user.avatar_key = None
+    db.commit()
+    db.refresh(user)
+    return UserResponse.model_validate(user)
+
+
+@router.get("/avatar/{user_id}", include_in_schema=False)
+def get_avatar(user_id: str, db: Session = Depends(get_db)) -> Response:
+    """Serve a profile picture. The versioned URL makes immutable caching safe."""
+    user = db.get(User, user_id)
+    if user is None or not user.avatar_data:
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+    return Response(
+        content=user.avatar_data,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )

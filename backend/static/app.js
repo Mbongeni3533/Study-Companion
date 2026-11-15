@@ -82,6 +82,11 @@
       .join("")
       .toUpperCase();
 
+  const avatarMarkup = (user, cls = "") =>
+    user && user.avatar_url
+      ? `<img class="avatar ${cls}" src="${esc(user.avatar_url)}" alt="" />`
+      : `<span class="avatar ${cls}">${esc(initials(user && user.name))}</span>`;
+
   const parseDay = (iso) => {
     if (!iso) return null;
     const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
@@ -356,7 +361,7 @@
       : `<p class="small muted" style="padding:6px 10px;">No courses yet.</p>`;
 
     $("#user-chip").innerHTML = `
-      <span class="avatar">${esc(initials(user.name))}</span>
+      ${avatarMarkup(user)}
       <span class="user-chip-text">
         <span class="user-chip-name">${esc(user.name)}</span>
         <span class="user-chip-role">${user.is_anonymous ? "Guest session" : esc(user.email || "Student")}</span>
@@ -1182,7 +1187,11 @@
     const citations = (meta.citations || []).slice(0, 3);
     return `
       <div class="msg ${isUser ? "msg-user" : "msg-assistant"}">
-        <span class="msg-avatar">${isUser ? esc(initials(state.user.name)) : "SC"}</span>
+        ${isUser
+          ? (state.user.avatar_url
+              ? `<img class="msg-avatar" src="${esc(state.user.avatar_url)}" alt="" />`
+              : `<span class="msg-avatar">${esc(initials(state.user.name))}</span>`)
+          : '<span class="msg-avatar">SC</span>'}
         <div>
           <div class="bubble">${md(message.content)}</div>
           ${
@@ -1383,6 +1392,18 @@
         <section class="card">
           <div class="card-head"><div><h2>Profile</h2><p class="card-sub">${user.is_anonymous ? "Guest session - no account attached" : esc(user.email)}</p></div></div>
           <form id="profile-form" class="auth-form">
+            <div class="avatar-uploader">
+              ${avatarMarkup(user, "avatar-xl")}
+              <div class="avatar-uploader-copy">
+                <span class="avatar-uploader-title">Profile picture</span>
+                <div class="row" style="gap:8px;flex-wrap:wrap;">
+                  <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+                  <button type="button" class="btn btn-ghost btn-sm" id="avatar-upload">${user.avatar_url ? "Change photo" : "Upload photo"}</button>
+                  ${user.avatar_url ? '<button type="button" class="btn btn-ghost btn-sm" id="avatar-remove">Remove</button>' : ""}
+                </div>
+                <span class="small muted">JPG, PNG, WebP or GIF, up to 8 MB.</span>
+              </div>
+            </div>
             <div class="field">
               <label for="profile-name">Name</label>
               <input id="profile-name" type="text" value="${esc(user.name)}" maxlength="120" />
@@ -1408,7 +1429,7 @@
           <div class="card-head"><div><h2>Account</h2><p class="card-sub">${user.is_anonymous ? "Guest" : "Signed in"} · ${esc(user.subscription_tier)} plan</p></div></div>
           <div class="stack" style="gap:12px;">
             <div class="doc-row" style="border:0;background:none;padding:0;">
-              <span class="avatar" style="width:38px;height:38px;">${esc(initials(user.name))}</span>
+              ${avatarMarkup(user, "avatar-md")}
               <div class="doc-body">
                 <span class="doc-name">${esc(user.name)}</span>
                 <span class="doc-meta">${user.is_anonymous ? "Guest session - stored in this browser" : esc(user.email)}</span>
@@ -1437,6 +1458,53 @@
           <button class="btn btn-ghost btn-sm" data-action="retake-assessment">${icon("refresh")} ${user.thinking_level ? "Retake the check" : "Take the check"}</button>
         </div>
       </section>`;
+
+    const avatarInput = $("#avatar-file");
+    $("#avatar-upload")?.addEventListener("click", () => avatarInput?.click());
+    avatarInput?.addEventListener("change", async () => {
+      const file = avatarInput.files && avatarInput.files[0];
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        toast("Choose a JPG, PNG, WebP or GIF picture.", "error");
+        return;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        toast("Pictures must be 8 MB or smaller.", "error");
+        return;
+      }
+      const button = $("#avatar-upload");
+      button.disabled = true;
+      button.textContent = "Uploading...";
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const updated = await api("/auth/me/avatar", { method: "POST", form });
+        state.user = updated;
+        persist();
+        renderChrome();
+        renderSettings();
+        toast("Profile picture updated.", "success");
+      } catch (error) {
+        toast(error.message, "error");
+        button.disabled = false;
+        button.textContent = user.avatar_url ? "Change photo" : "Upload photo";
+      }
+    });
+    $("#avatar-remove")?.addEventListener("click", async () => {
+      const button = $("#avatar-remove");
+      button.disabled = true;
+      try {
+        const updated = await api("/auth/me/avatar", { method: "DELETE" });
+        state.user = updated;
+        persist();
+        renderChrome();
+        renderSettings();
+        toast("Profile picture removed.", "info");
+      } catch (error) {
+        toast(error.message, "error");
+        button.disabled = false;
+      }
+    });
 
     $("#profile-form").addEventListener("submit", async (event) => {
       event.preventDefault();
