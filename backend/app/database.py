@@ -85,7 +85,10 @@ def _add_missing_columns() -> None:
             )
             default = getattr(column.default, "arg", None)
             if isinstance(default, bool):
-                ddl += f" DEFAULT {int(default)}"
+                if engine.dialect.name == "postgresql":
+                    ddl += " DEFAULT TRUE" if default else " DEFAULT FALSE"
+                else:
+                    ddl += f" DEFAULT {int(default)}"
             elif isinstance(default, (int, float)):
                 ddl += f" DEFAULT {default}"
             elif isinstance(default, str):
