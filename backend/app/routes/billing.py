@@ -113,6 +113,14 @@ def billing_status(user: User = Depends(get_current_user)) -> BillingStatusRespo
             and not service.is_configured
             and user.subscription_status == "pending"
         ),
+        portal_available=(
+            user.subscription_status == "subscribed"
+            and bool(service.secret_key and user.stripe_customer_id)
+        ),
+        cancel_available=(
+            user.subscription_status == "subscribed"
+            and not user.stripe_subscription_id
+        ),
         price_label=service.price_label,
     )
 
@@ -150,6 +158,55 @@ def create_checkout(
             detail=result.message or "Could not start checkout.",
         )
     return CheckoutSessionResponse(url=result.url)
+
+
+@router.post("/portal", response_model=CheckoutSessionResponse)
+def create_billing_portal(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> CheckoutSessionResponse:
+    if user.subscription_status != "subscribed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only active subscribers can manage billing.",
+        )
+    if not user.stripe_customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This subscription has no payment details to manage.",
+        )
+
+    result = _service().create_portal_session(
+        customer_id=user.stripe_customer_id,
+        base_url=get_settings().public_app_url or str(request.base_url),
+    )
+    if not result.url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result.message or "Could not open the billing portal.",
+        )
+    return CheckoutSessionResponse(url=result.url)
+
+
+@router.post("/cancel", response_model=UserResponse)
+def cancel_beta_subscription(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    if user.subscription_status == "suspended":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account is suspended.")
+    if user.subscription_status != "subscribed":
+        return UserResponse.model_validate(user)
+    if user.stripe_subscription_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Manage this subscription in the billing portal.",
+        )
+
+    _deactivate_user(db, user, "Beta subscription cancelled from Settings.")
+    db.commit()
+    db.refresh(user)
+    return UserResponse.model_validate(user)
 
 
 @router.post("/activate", response_model=UserResponse)

@@ -1460,7 +1460,15 @@
       let detail = "Billing is not configured yet. Contact the administrator.";
       let action = "";
       if (status === "subscribed") {
-        detail = "Your subscription is active.";
+        if (info.portal_available) {
+          detail = "Your subscription is active. Update payment details or cancel in the secure billing portal.";
+          action = `<button class="btn btn-primary btn-sm" type="button" id="billing-portal">Manage billing</button>`;
+        } else if (info.cancel_available) {
+          detail = "Your subscription is active. You can cancel it at any time.";
+          action = `<button class="btn btn-ghost btn-sm" type="button" id="billing-cancel">Cancel subscription</button>`;
+        } else {
+          detail = "Your subscription is active. Contact the administrator to manage it.";
+        }
       } else if (status === "suspended") {
         detail = "This account is suspended. Contact the administrator.";
       } else if (info.checkout_configured) {
@@ -1510,6 +1518,40 @@
           toast(error.message || "Could not start checkout.", "error");
         }
       });
+
+      $("#billing-portal")?.addEventListener("click", async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Opening billing…";
+        try {
+          const result = await api("/billing/portal", { method: "POST" });
+          window.location.href = result.url;
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = "Manage billing";
+          toast(error.message || "Could not open billing.", "error");
+        }
+      });
+
+      $("#billing-cancel")?.addEventListener("click", () => {
+        confirmDialog(
+          "Cancel subscription?",
+          "Your plan will return to Free. You can activate a beta subscription again later.",
+          "Cancel subscription",
+          async () => {
+            try {
+              const updated = await api("/billing/cancel", { method: "POST" });
+              state.user = updated;
+              persist();
+              renderChrome();
+              renderSettings();
+              toast("Subscription cancelled.", "success");
+            } catch (error) {
+              toast(error.message || "Could not cancel the subscription.", "error");
+            }
+          },
+        );
+      });
     } catch (error) {
       const live = $("#billing-panel");
       if (live) live.innerHTML = `<p class="small muted">${esc(error.message || "Subscription status is unavailable.")}</p>`;
@@ -1522,6 +1564,18 @@
     if (!result) return;
     if (result === "cancelled") {
       toast("Checkout cancelled. Your plan has not changed.", "info");
+      history.replaceState(null, "", "#/settings");
+      return;
+    }
+    if (result === "portal") {
+      try {
+        state.user = await api("/auth/me");
+        persist();
+        renderChrome();
+        toast("Billing settings updated.", "success");
+      } catch {
+        // The next page load will refresh the account state.
+      }
       history.replaceState(null, "", "#/settings");
       return;
     }

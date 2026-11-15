@@ -176,6 +176,8 @@ class BillingStatusResponse(BaseModel):
     subscription_tier: str
     checkout_configured: bool = False
     activation_available: bool = False
+    portal_available: bool = False
+    cancel_available: bool = False
     price_label: str = ""
 
 

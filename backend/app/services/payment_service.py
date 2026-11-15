@@ -66,6 +66,12 @@ class CheckoutResult:
     message: str = ""
 
 
+@dataclass
+class PortalResult:
+    url: str | None = None
+    message: str = ""
+
+
 class PaymentService:
     """Thin wrapper around Stripe Checkout, disabled unless configured."""
 
@@ -136,6 +142,36 @@ class PaymentService:
         if not url:
             return CheckoutResult(configured=True, message="Stripe did not return a checkout URL.")
         return CheckoutResult(configured=True, url=url)
+
+    def create_portal_session(self, *, customer_id: str, base_url: str) -> PortalResult:
+        """Open Stripe's hosted portal for payment details and cancellation."""
+        if not self.secret_key:
+            return PortalResult(message="Billing is not configured.")
+
+        base = base_url.rstrip("/")
+        try:
+            response = httpx.post(
+                "https://api.stripe.com/v1/billing_portal/sessions",
+                data={
+                    "customer": customer_id,
+                    "return_url": f"{base}/?billing=portal",
+                },
+                auth=(self.secret_key, ""),
+                timeout=20,
+            )
+        except httpx.HTTPError as exc:
+            logger.warning("Stripe portal request failed: %s", exc)
+            return PortalResult(message="Could not reach the payment provider.")
+
+        data = response.json() if response.content else {}
+        if response.status_code >= 400:
+            message = data.get("error", {}).get("message") if isinstance(data, dict) else None
+            logger.warning("Stripe portal rejected: %s", message or response.status_code)
+            return PortalResult(message=message or "The payment provider rejected the portal request.")
+        url = data.get("url") if isinstance(data, dict) else None
+        if not url:
+            return PortalResult(message="Stripe did not return a portal URL.")
+        return PortalResult(url=url)
 
     def retrieve_checkout_session(self, session_id: str) -> tuple[dict[str, Any] | None, str]:
         if not self.is_configured:
