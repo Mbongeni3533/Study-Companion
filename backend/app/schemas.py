@@ -69,6 +69,7 @@ class UserResponse(ORMModel):
         return value
     subscription_tier: str
     subscription_status: str = "pending"
+    billing_update_emails: bool = True
     daily_study_minutes: int
     created_at: datetime
 
@@ -178,7 +179,12 @@ class BillingStatusResponse(BaseModel):
     activation_available: bool = False
     portal_available: bool = False
     cancel_available: bool = False
+    billing_update_emails: bool = True
     price_label: str = ""
+
+
+class BillingPreferencesUpdate(BaseModel):
+    billing_update_emails: bool
 
 
 class CheckoutSessionResponse(BaseModel):

@@ -1055,6 +1055,22 @@ html { -webkit-text-size-adjust: 100%; }
 .billing-panel .doc-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .billing-panel .btn { justify-self: start; }
 
+.billing-preference {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.billing-preference input { width: auto; margin-top: 3px; accent-color: var(--accent); }
+.billing-preference span { display: grid; gap: 2px; }
+.billing-preference strong { font-size: 13px; font-weight: 600; }
+.billing-preference small { font-size: 12px; color: var(--muted); line-height: 1.45; }
+
 .billing-history {
   display: grid;
   gap: 8px;

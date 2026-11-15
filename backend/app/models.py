@@ -70,6 +70,7 @@ class User(TimestampMixin, Base):
     )
     stripe_customer_id: Mapped[str | None] = mapped_column(String(255), index=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    billing_update_emails: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     daily_study_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

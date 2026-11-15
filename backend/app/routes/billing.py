@@ -18,6 +18,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import BillingEvent, SubscriberEvent, User, as_utc
 from ..schemas import (
+    BillingPreferencesUpdate,
     BillingStatusResponse,
     CheckoutConfirmRequest,
     CheckoutSessionResponse,
@@ -173,8 +174,21 @@ def billing_status(user: User = Depends(get_current_user)) -> BillingStatusRespo
             user.subscription_status == "subscribed"
             and not user.stripe_subscription_id
         ),
+        billing_update_emails=user.billing_update_emails,
         price_label=service.price_label,
     )
+
+
+@router.patch("/preferences", response_model=UserResponse)
+def update_billing_preferences(
+    payload: BillingPreferencesUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    user.billing_update_emails = payload.billing_update_emails
+    db.commit()
+    db.refresh(user)
+    return UserResponse.model_validate(user)
 
 
 @router.get("/history", response_model=SubscriptionHistoryResponse)
@@ -448,7 +462,9 @@ async def stripe_webhook(
         elif event_type == "customer.subscription.deleted":
             notify_cancelled = _deactivate_user(db, user, "Stripe subscription was cancelled.")
         elif event_type == "customer.updated":
-            notify_billing = user.subscription_status == "subscribed"
+            notify_billing = (
+                user.subscription_status == "subscribed" and user.billing_update_emails
+            )
 
     db.add(
         BillingEvent(

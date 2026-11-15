@@ -1492,6 +1492,13 @@
           </div>
         </div>
         ${action}
+        <label class="billing-preference">
+          <input type="checkbox" id="billing-update-emails" ${info.billing_update_emails === false ? "" : "checked"} />
+          <span>
+            <strong>Billing update emails</strong>
+            <small>Get a note when payment or billing details change. Cancellation confirmations are always sent.</small>
+          </span>
+        </label>
         <div class="billing-history">
           <span class="billing-history-title">History</span>
           <div id="billing-history-list" class="billing-history-list"><p class="small muted">Loading history…</p></div>
@@ -1561,6 +1568,29 @@
             }
           },
         );
+      });
+
+      $("#billing-update-emails")?.addEventListener("change", async (event) => {
+        const input = event.currentTarget;
+        const enabled = input.checked;
+        input.disabled = true;
+        try {
+          const updated = await api("/billing/preferences", {
+            method: "PATCH",
+            body: { billing_update_emails: enabled },
+          });
+          state.user = updated;
+          persist();
+          input.disabled = false;
+          toast(
+            enabled ? "Billing update emails turned on." : "Billing update emails turned off.",
+            "success",
+          );
+        } catch (error) {
+          input.checked = !enabled;
+          input.disabled = false;
+          toast(error.message || "Could not save email preferences.", "error");
+        }
       });
 
       loadBillingHistory();
