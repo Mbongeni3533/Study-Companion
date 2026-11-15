@@ -189,6 +189,18 @@ class CheckoutConfirmRequest(BaseModel):
     session_id: str = Field(min_length=8, max_length=255)
 
 
+class SubscriptionHistoryItem(BaseModel):
+    kind: Literal["activation", "cancellation", "billing", "account"]
+    title: str
+    detail: str | None = None
+    status: str | None = None
+    created_at: datetime
+
+
+class SubscriptionHistoryResponse(BaseModel):
+    items: list[SubscriptionHistoryItem] = Field(default_factory=list)
+
+
 # ------------------------------------------------------------------- courses
 class FeedbackCreate(BaseModel):
     message: str = Field(min_length=1, max_length=4000)

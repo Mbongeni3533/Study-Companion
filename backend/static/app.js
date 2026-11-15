@@ -106,6 +106,12 @@
     return day.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
   };
 
+  const fmtDateTime = (iso) => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  };
+
   const fmtBytes = (bytes) => {
     const size = Number(bytes) || 0;
     if (size < 1024) return `${size} B`;
@@ -1485,7 +1491,11 @@
             <span class="doc-meta">${esc(detail)}</span>
           </div>
         </div>
-        ${action}`;
+        ${action}
+        <div class="billing-history">
+          <span class="billing-history-title">History</span>
+          <div id="billing-history-list" class="billing-history-list"><p class="small muted">Loading history…</p></div>
+        </div>`;
 
       $("#billing-activate")?.addEventListener("click", async (event) => {
         const button = event.currentTarget;
@@ -1552,9 +1562,39 @@
           },
         );
       });
+
+      loadBillingHistory();
     } catch (error) {
       const live = $("#billing-panel");
       if (live) live.innerHTML = `<p class="small muted">${esc(error.message || "Subscription status is unavailable.")}</p>`;
+    }
+  }
+
+  async function loadBillingHistory() {
+    const list = $("#billing-history-list");
+    if (!list) return;
+    try {
+      const data = await api("/billing/history");
+      const live = $("#billing-history-list");
+      if (!live) return;
+      if (!data.items || !data.items.length) {
+        live.innerHTML = '<p class="small muted">No subscription changes yet.</p>';
+        return;
+      }
+      live.innerHTML = data.items
+        .map((item) => `
+          <div class="history-row">
+            <span class="history-dot history-${esc(item.kind)}"></span>
+            <div class="history-copy">
+              <span class="history-title">${esc(item.title)}</span>
+              ${item.detail ? `<span class="history-detail">${esc(item.detail)}</span>` : ""}
+            </div>
+            <time class="history-time" datetime="${esc(item.created_at)}">${esc(fmtDateTime(item.created_at))}</time>
+          </div>`)
+        .join("");
+    } catch (error) {
+      const live = $("#billing-history-list");
+      if (live) live.innerHTML = `<p class="small muted">${esc(error.message || "History is unavailable.")}</p>`;
     }
   }
 

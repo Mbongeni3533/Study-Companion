@@ -16,11 +16,13 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
-from ..models import BillingEvent, User
+from ..models import BillingEvent, SubscriberEvent, User, as_utc
 from ..schemas import (
     BillingStatusResponse,
     CheckoutConfirmRequest,
     CheckoutSessionResponse,
+    SubscriptionHistoryItem,
+    SubscriptionHistoryResponse,
     UserResponse,
 )
 from ..services.payment_service import PaymentService
@@ -30,6 +32,22 @@ from ..utils.deps import get_current_user
 logger = logging.getLogger("study_companion.billing")
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+
+AUDIT_HISTORY = {
+    "registered": ("account", "Account created", "Your Study Companion account was created."),
+    "subscribed": ("activation", "Subscription activated", "Your Plus subscription became active."),
+    "subscription_ended": ("cancellation", "Subscription cancelled", "Your subscription returned to the Free plan."),
+    "status_changed": ("billing", "Subscription status updated", "An administrator changed your subscription status."),
+}
+
+STRIPE_HISTORY = {
+    "checkout.session.completed": ("activation", "Stripe checkout completed", "Stripe confirmed your subscription checkout."),
+    "customer.subscription.created": ("billing", "Stripe subscription created", "Stripe created your recurring subscription."),
+    "customer.subscription.updated": ("billing", "Stripe subscription updated", "Stripe updated your subscription details."),
+    "customer.subscription.deleted": ("cancellation", "Stripe subscription ended", "Stripe cancelled your recurring subscription."),
+    "invoice.paid": ("billing", "Invoice paid", "Your latest subscription invoice was paid."),
+    "invoice.payment_failed": ("billing", "Invoice payment failed", "Stripe could not charge your latest invoice."),
+}
 
 
 def _service() -> PaymentService:
@@ -123,6 +141,60 @@ def billing_status(user: User = Depends(get_current_user)) -> BillingStatusRespo
         ),
         price_label=service.price_label,
     )
+
+
+@router.get("/history", response_model=SubscriptionHistoryResponse)
+def subscription_history(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> SubscriptionHistoryResponse:
+    items: list[SubscriptionHistoryItem] = []
+
+    audit_events = db.scalars(
+        select(SubscriberEvent)
+        .where(SubscriberEvent.user_id == user.id)
+        .order_by(SubscriberEvent.created_at.desc())
+        .limit(50)
+    ).all()
+    for event in audit_events:
+        kind, title, fallback = AUDIT_HISTORY.get(
+            event.action, ("billing", "Subscription updated", "Your subscription changed.")
+        )
+        detail = event.detail or fallback
+        if event.action == "registered" and detail.strip().lower() in {"", "account created."}:
+            detail = "Start of your subscription history."
+        items.append(
+            SubscriptionHistoryItem(
+                kind=kind,
+                title=title,
+                detail=detail,
+                status=event.status,
+                created_at=event.created_at,
+            )
+        )
+
+    billing_events = db.scalars(
+        select(BillingEvent)
+        .where(BillingEvent.user_id == user.id)
+        .order_by(BillingEvent.created_at.desc())
+        .limit(50)
+    ).all()
+    for event in billing_events:
+        kind, title, detail = STRIPE_HISTORY.get(
+            event.event_type,
+            ("billing", "Billing event", event.event_type.replace(".", " ").replace("_", " ").title()),
+        )
+        items.append(
+            SubscriptionHistoryItem(
+                kind=kind,
+                title=title,
+                detail=detail,
+                created_at=event.created_at,
+            )
+        )
+
+    items.sort(key=lambda item: as_utc(item.created_at) or item.created_at, reverse=True)
+    return SubscriptionHistoryResponse(items=items[:30])
 
 
 @router.post("/checkout", response_model=CheckoutSessionResponse)
