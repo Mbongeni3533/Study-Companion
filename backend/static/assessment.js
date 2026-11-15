@@ -53,6 +53,7 @@
 
   function mount(container, opts = {}) {
     const onComplete = typeof opts.onComplete === "function" ? opts.onComplete : () => {};
+    const required = Boolean(opts.required);
 
     const state = {
       loading: true,
@@ -117,9 +118,10 @@
             </div>` : ""}
           <div class="assessment-actions">
             <button class="btn btn-primary btn-lg" data-action="start">${esc(intro.start || "Start the check")}</button>
-            <button class="btn btn-ghost" data-action="skip">${esc(intro.skip || "Skip for now")}</button>
+            ${required ? "" : `<button class="btn btn-ghost" data-action="skip">${esc(intro.skip || "Skip for now")}</button>`}
           </div>
           <p class="assessment-privacy small muted">Only you can see your result.</p>
+          ${required ? '<p class="assessment-privacy small muted">This check is required once before you can start studying.</p>' : ""}
         </div>`;
       container.querySelector('[data-action="start"]').addEventListener("click", () => {
         state.step = "question";
@@ -127,7 +129,8 @@
         state.answers = {};
         paint();
       });
-      container.querySelector('[data-action="skip"]').addEventListener("click", () => {
+      const skip = container.querySelector('[data-action="skip"]');
+      if (skip) skip.addEventListener("click", () => {
         window.location.hash = "#/dashboard";
       });
     }

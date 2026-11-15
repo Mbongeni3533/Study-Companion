@@ -388,16 +388,24 @@
     setAuthError("");
   }
 
-  async function startSession(data, onboarding = false) {
+  function requiresThinkingCheck(user = state.user) {
+    return Boolean(user && !user.is_anonymous && !user.assessment_completed_at);
+  }
+
+  function enterAssessmentIfRequired() {
+    if (!requiresThinkingCheck()) return false;
+    if (location.hash === "#/assessment") render();
+    else window.location.hash = "#/assessment";
+    return true;
+  }
+
+  async function startSession(data) {
     state.token = data.access_token;
     state.user = data.user;
     persist();
     showShell();
     await loadCourses();
-    if (onboarding && !(data.user && data.user.assessment_completed_at)) {
-      window.location.hash = "#/assessment";
-      return;
-    }
+    if (enterAssessmentIfRequired()) return;
     if (!location.hash) window.location.hash = "#/dashboard";
     else render();
   }
@@ -424,7 +432,7 @@
         ? { email, password, name: name || "Student", invite_code: inviteCode || undefined }
         : { email, password };
       const data = await api(`/auth/${authMode}`, { method: "POST", body: payload, auth: false });
-      await startSession(data, authMode === "register");
+      await startSession(data);
     } catch (error) {
       setAuthError(error.message);
     } finally {
@@ -486,6 +494,10 @@
   async function render() {
     if (!state.user) return;
     const route = parseRoute();
+    if (requiresThinkingCheck() && route.name !== "assessment") {
+      window.location.hash = "#/assessment";
+      return;
+    }
     const token = ++renderToken;
     closeNav();
 
@@ -652,8 +664,13 @@
     host.innerHTML = `<div id="assessment-host"></div>`;
     if (window.Assessment && typeof window.Assessment.mount === "function") {
       window.Assessment.mount($("#assessment-host"), {
-        onComplete: async () => {
-          try { state.user = await api("/auth/me"); } catch (e) { /* ignore */ }
+        required: requiresThinkingCheck(),
+        onComplete: async (_profile, updatedUser) => {
+          if (updatedUser) {
+            state.user = updatedUser;
+          } else {
+            try { state.user = await api("/auth/me"); } catch (e) { /* ignore */ }
+          }
           persist();
           renderChrome();
         },
@@ -2636,6 +2653,7 @@
       showShell();
       await loadCourses();
       await handleBillingReturn();
+      if (enterAssessmentIfRequired()) return;
       render();
     } catch {
       signOut();
