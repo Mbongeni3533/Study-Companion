@@ -127,6 +127,49 @@ class InviteCodeResponse(BaseModel):
     created_at: datetime
 
 
+SubscriptionStatus = Literal["pending", "subscribed", "suspended"]
+
+
+class SubscriberResponse(ORMModel):
+    id: str
+    name: str
+    email: str | None
+    subscription_status: str
+    subscription_tier: str
+    created_at: datetime
+    last_active_at: datetime | None = None
+
+
+class SubscriberSummary(BaseModel):
+    total: int = 0
+    subscribed: int = 0
+    pending: int = 0
+    suspended: int = 0
+
+
+class SubscriberEventResponse(ORMModel):
+    id: int
+    user_id: str | None
+    name: str
+    email: str | None
+    action: str
+    status: str | None
+    detail: str | None
+    created_at: datetime
+
+
+class SubscriberListResponse(BaseModel):
+    subscribers: list[SubscriberResponse] = Field(default_factory=list)
+    summary: SubscriberSummary = Field(default_factory=SubscriberSummary)
+    events: list[SubscriberEventResponse] = Field(default_factory=list)
+    sheet_url: str = ""
+    feed_enabled: bool = False
+
+
+class SubscriberUpdate(BaseModel):
+    subscription_status: SubscriptionStatus
+
+
 # ------------------------------------------------------------------- courses
 class FeedbackCreate(BaseModel):
     message: str = Field(min_length=1, max_length=4000)

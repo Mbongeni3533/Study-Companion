@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Feedback dashboard · Study Companion</title>
+  <title>Admin dashboard · Study Companion</title>
   <meta name="robots" content="noindex, nofollow" />
   <meta name="theme-color" content="#0b1020" />
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
@@ -18,8 +18,8 @@
         <span class="brand-name">Study Companion</span>
       </div>
       <div style="flex:1;min-width:240px;">
-        <h1>Feedback dashboard</h1>
-        <p class="sub">Every student's feedback, with their rating, category, page and date.</p>
+        <h1>Admin dashboard</h1>
+        <p class="sub">Monitor subscribers, invite links and student feedback from one place.</p>
       </div>
       <a class="btn btn-ghost" href="/">Back to app</a>
     </header>
@@ -49,6 +49,28 @@
     </section>
 
     <div class="admin-grid" id="admin-content" hidden>
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2>Subscribers</h2>
+            <p class="card-sub" id="subscriber-count">Loading subscriber records…</p>
+          </div>
+          <div class="card-head-actions">
+            <a class="btn btn-ghost btn-sm" id="subscriber-sheet" href="#" target="_blank" rel="noopener" hidden>Open Google Sheet</a>
+            <button class="btn btn-ghost btn-sm" type="button" id="subscriber-refresh">Refresh</button>
+          </div>
+        </div>
+        <div class="subscriber-stats" id="subscriber-stats" hidden></div>
+        <div id="admin-subscribers" class="admin-table-wrap">
+          <div class="admin-empty">Enter the admin key to see subscriber records.</div>
+        </div>
+        <p class="small muted" id="subscriber-status" role="status" aria-live="polite" aria-atomic="true" style="margin-top:12px;"></p>
+        <div class="subscriber-activity" id="subscriber-activity" hidden>
+          <h3>Subscriber agent activity</h3>
+          <ul id="subscriber-events"></ul>
+        </div>
+      </section>
+
       <section class="card">
         <div class="card-head">
           <div>

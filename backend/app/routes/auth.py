@@ -20,6 +20,7 @@ from ..schemas import (
     UserResponse,
     UserUpdate,
 )
+from ..services.subscriber_agent import record_subscriber_event
 from ..utils.auth import (
     create_access_token,
     generate_user_id,
@@ -108,6 +109,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> Token:
     db.add(user)
     db.commit()
     db.refresh(user)
+    record_subscriber_event(db, user, "registered", user.subscription_status, "Account created.")
+    db.commit()
     return _token_for(user)
 
 
@@ -120,6 +123,11 @@ def login(payload: UserLogin, db: Session = Depends(get_db)) -> Token:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    if user.subscription_status == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is suspended. Contact the administrator.",
         )
     user.last_active_at = datetime.now(timezone.utc)
     db.commit()

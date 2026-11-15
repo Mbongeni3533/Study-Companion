@@ -64,6 +64,10 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str | None] = mapped_column(String(255))
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     subscription_tier: Mapped[str] = mapped_column(String(32), default="free", nullable=False)
+    # pending: registered but not activated; subscribed: active; suspended: blocked.
+    subscription_status: Mapped[str] = mapped_column(
+        String(24), default="pending", nullable=False, index=True
+    )
     daily_study_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -75,6 +79,27 @@ class User(TimestampMixin, Base):
     )
     counselling_sessions: Mapped[list["CounsellingSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class SubscriberEvent(Base):
+    """Audit trail maintained by the subscriber-monitor agent.
+
+    Snapshots the subscriber's name and email so the history remains useful
+    after an account is deleted.
+    """
+
+    __tablename__ = "subscriber_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    name: Mapped[str] = mapped_column(String(120), default="Student", nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255))
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str | None] = mapped_column(String(24))
+    detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
     )
 
 

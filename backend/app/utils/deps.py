@@ -44,6 +44,12 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if user.subscription_status == "suspended":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is suspended. Contact the administrator.",
+        )
+
     # Lightweight activity tracking (only persisted when it changes materially).
     now = datetime.now(timezone.utc)
     last = as_utc(user.last_active_at)

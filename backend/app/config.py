@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     # Optional public Google Doc with beta registration and feedback instructions.
     registration_doc_url: str = "https://docs.google.com/document/d/1PWpMViVx-JaVEbgsMR84oROHmxXr9YPHoqL3qpT5qnM/edit"
 
+    # --- Subscriber monitor ---
+    # The Google Sheet imports the read-only CSV feed. Only the SHA-256 of the
+    # feed token is stored here; the token itself lives in the private sheet.
+    subscriber_feed_token_hash: str = (
+        "21bd05b26806c5d7b5feb6e6b55861f010a09c07f6942ec3a38c4bc98752effe"
+    )
+    # Optional link shown in the dashboard; set it in the deployment environment
+    # so the private sheet URL is not committed to the repository.
+    subscriber_sheet_url: str = ""
+
     # --- Email delivery for beta invites (Resend) ---
     resend_api_key: str | None = None
     resend_from_email: str = "Study Companion <onboarding@resend.dev>"

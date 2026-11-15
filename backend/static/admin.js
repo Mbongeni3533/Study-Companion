@@ -46,6 +46,178 @@
     node.textContent = message;
   }
 
+  const SUBSCRIBER_STATUSES = ["pending", "subscribed", "suspended"];
+  const SUBSCRIBER_LABELS = {
+    pending: "Pending",
+    subscribed: "Subscribed",
+    suspended: "Suspended",
+  };
+
+  function subscriberLabel(status) {
+    return SUBSCRIBER_LABELS[status] || "Pending";
+  }
+
+  function showSubscriberStatus(message, ok = true) {
+    const node = $("#subscriber-status");
+    if (!node) return;
+    node.textContent = message || "";
+    node.classList.toggle("admin-status-ok", Boolean(message) && ok);
+    node.classList.toggle("admin-status-error", Boolean(message) && !ok);
+  }
+
+  function renderSubscribers(data) {
+    const rows = Array.isArray(data.subscribers) ? data.subscribers : [];
+    const summary = data.summary || {};
+    const total = Number(summary.total || rows.length);
+    $("#subscriber-count").textContent = `${total} subscriber${total === 1 ? "" : "s"} · ${summary.subscribed || 0} subscribed · ${summary.pending || 0} pending · ${summary.suspended || 0} suspended${data.feed_enabled ? " · Google Sheet feed active" : ""}`;
+
+    const stats = $("#subscriber-stats");
+    stats.innerHTML = `
+      <div><strong>${esc(total)}</strong><span>Total</span></div>
+      <div><strong>${esc(summary.subscribed || 0)}</strong><span>Subscribed</span></div>
+      <div><strong>${esc(summary.pending || 0)}</strong><span>Pending</span></div>
+      <div><strong>${esc(summary.suspended || 0)}</strong><span>Suspended</span></div>`;
+    stats.hidden = false;
+
+    const sheet = $("#subscriber-sheet");
+    if (data.sheet_url) {
+      sheet.href = data.sheet_url;
+      sheet.hidden = false;
+    } else {
+      sheet.hidden = true;
+    }
+
+    const host = $("#admin-subscribers");
+    if (!rows.length) {
+      host.innerHTML = '<div class="admin-empty">No registered subscribers yet.</div>';
+    } else {
+      host.innerHTML = `
+        <table class="admin-table">
+          <thead>
+            <tr><th>Subscriber</th><th>Subscription</th><th>Plan</th><th>Joined</th><th>Last active</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            ${rows
+              .map((row) => {
+                const status = SUBSCRIBER_STATUSES.includes(row.subscription_status) ? row.subscription_status : "pending";
+                const name = row.name || "Student";
+                return `
+                  <tr>
+                    <td><span class="admin-user"><strong>${esc(name)}</strong><span>${esc(row.email || "No email on file")}</span></span></td>
+                    <td>
+                      <select class="subscriber-status subscriber-status--${esc(status)}" data-subscriber-status="${esc(row.id)}"
+                        data-current="${esc(status)}" data-name="${esc(name)}" aria-label="Subscription status for ${esc(name)}">
+                        ${SUBSCRIBER_STATUSES.map(
+                          (value) => `<option value="${value}" ${value === status ? "selected" : ""}>${subscriberLabel(value)}</option>`
+                        ).join("")}
+                      </select>
+                    </td>
+                    <td>${esc(row.subscription_tier || "free")}</td>
+                    <td><span class="admin-date">${esc(fmtDate(row.created_at))}</span></td>
+                    <td><span class="admin-date">${esc(fmtDate(row.last_active_at))}</span></td>
+                    <td><button class="btn btn-ghost btn-sm admin-danger" type="button" data-subscriber-delete="${esc(row.id)}"
+                      data-name="${esc(name)}">Delete</button></td>
+                  </tr>`;
+              })
+              .join("")}
+          </tbody>
+        </table>`;
+    }
+
+    host.querySelectorAll("[data-subscriber-status]").forEach((select) => {
+      select.addEventListener("change", () => updateSubscriberStatus(select));
+    });
+    host.querySelectorAll("[data-subscriber-delete]").forEach((button) => {
+      button.addEventListener("click", () => deleteSubscriber(button));
+    });
+
+    const events = Array.isArray(data.events) ? data.events : [];
+    const activity = $("#subscriber-activity");
+    activity.hidden = !events.length;
+    $("#subscriber-events").innerHTML = events
+      .map((event) => {
+        const action = event.action === "status_changed" ? "Status changed" : event.action === "registered" ? "Registered" : event.action === "deleted" ? "Deleted" : event.action;
+        return `<li><span class="subscriber-event-action">${esc(action)}</span><strong>${esc(event.name)}</strong>${event.email ? ` <span class="muted">${esc(event.email)}</span>` : ""}${event.status ? ` · ${esc(subscriberLabel(event.status))}` : ""}<time>${esc(fmtDate(event.created_at))}</time></li>`;
+      })
+      .join("");
+  }
+
+  async function loadSubscribers() {
+    const host = $("#admin-subscribers");
+    host.innerHTML = '<div class="admin-empty">Loading subscribers…</div>';
+    try {
+      const response = await fetch("/admin/subscribers", { credentials: "same-origin" });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      renderSubscribers(data || {});
+    } catch (error) {
+      host.innerHTML = '<div class="admin-empty">Subscribers could not be loaded. Check the admin key and try again.</div>';
+      showSubscriberStatus(error.message || "Could not load subscribers.", false);
+    }
+  }
+
+  async function updateSubscriberStatus(select) {
+    const id = select.dataset.subscriberStatus;
+    const name = select.dataset.name || "Subscriber";
+    const next = select.value;
+    const previous = select.dataset.current || next;
+    select.disabled = true;
+    showSubscriberStatus(`Saving ${name}'s subscription status…`);
+    try {
+      const response = await fetch(`/admin/subscribers/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ subscription_status: next }),
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      showSubscriberStatus(`${name} is now ${subscriberLabel(next).toLowerCase()}.`);
+      await loadSubscribers();
+    } catch (error) {
+      select.value = previous;
+      select.disabled = false;
+      showSubscriberStatus(error.message || "Could not update the subscriber.", false);
+    }
+  }
+
+  async function deleteSubscriber(button) {
+    const id = button.dataset.subscriberDelete;
+    const name = button.dataset.name || "this subscriber";
+    if (!window.confirm(`Delete ${name}? This removes their account, courses, documents and study history.`)) return;
+    button.disabled = true;
+    button.textContent = "Deleting…";
+    showSubscriberStatus(`Deleting ${name}…`);
+    try {
+      const response = await fetch(`/admin/subscribers/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      }
+      showSubscriberStatus(`${name} was deleted.`);
+      await loadSubscribers();
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Delete";
+      showSubscriberStatus(error.message || "Could not delete the subscriber.", false);
+    }
+  }
+
   function render(rows) {
     const count = $("#admin-count");
     if (!rows.length) {
@@ -223,7 +395,7 @@
     $("#admin-session").hidden = false;
     $("#admin-content").hidden = false;
     showError("");
-    await Promise.all([loadFeedback(), loadInvites()]);
+    await Promise.all([loadSubscribers(), loadFeedback(), loadInvites()]);
   }
 
   function showLogin(message = "") {
@@ -292,6 +464,7 @@
 
   $("#admin-key-form").addEventListener("submit", signIn);
   $("#admin-refresh").addEventListener("click", loadFeedback);
+  $("#subscriber-refresh").addEventListener("click", loadSubscribers);
   $("#invite-refresh").addEventListener("click", loadInvites);
   $("#invite-form").addEventListener("submit", createInvite);
   $("#admin-signout").addEventListener("click", signOut);
