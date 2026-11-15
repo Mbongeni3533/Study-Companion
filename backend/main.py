@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app import __version__
 from app.config import get_settings
 from app.database import get_db, init_db
-from app.routes import admin, assessment, auth, chat, documents, executive_agents, feedback, progress, resources, tasks, toolbox
+from app.routes import admin, assessment, auth, billing, chat, documents, executive_agents, feedback, progress, resources, tasks, toolbox
 from app.schemas import HealthResponse
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -102,6 +102,7 @@ async def revalidate_static(request: Request, call_next):
 
 
 app.include_router(auth.router)
+app.include_router(billing.router)
 app.include_router(admin.router)
 app.include_router(executive_agents.router)
 app.include_router(feedback.router)

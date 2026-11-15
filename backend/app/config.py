@@ -87,9 +87,14 @@ class Settings(BaseSettings):
     ai_timeout_seconds: float = 45.0
     ai_max_tokens: int = 1200
 
-    # --- Payments (phase 3, optional) ---
+    # --- Payments (optional) ---
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
+    stripe_price_id: str | None = None
+    # Public origin used to build Stripe success/cancel URLs.
+    public_app_url: str = "https://study-companion-o7k3.onrender.com"
+    # While Stripe is not configured, registered beta users may activate themselves.
+    allow_beta_self_activation: bool = True
 
     @property
     def sqlalchemy_url(self) -> str:

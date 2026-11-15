@@ -28,3 +28,13 @@ services:
         value: "25"
       - key: OCR_ENABLED
         value: "false"
+      # Optional paid checkout. Without both values, registered beta users can
+      # activate the Plus plan themselves from Settings.
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: PUBLIC_APP_URL
+        value: https://study-companion-o7k3.onrender.com

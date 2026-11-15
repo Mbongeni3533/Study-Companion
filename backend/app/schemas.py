@@ -68,6 +68,7 @@ class UserResponse(ORMModel):
                 return None
         return value
     subscription_tier: str
+    subscription_status: str = "pending"
     daily_study_minutes: int
     created_at: datetime
 
@@ -168,6 +169,22 @@ class SubscriberListResponse(BaseModel):
 
 class SubscriberUpdate(BaseModel):
     subscription_status: SubscriptionStatus
+
+
+class BillingStatusResponse(BaseModel):
+    subscription_status: str
+    subscription_tier: str
+    checkout_configured: bool = False
+    activation_available: bool = False
+    price_label: str = ""
+
+
+class CheckoutSessionResponse(BaseModel):
+    url: str
+
+
+class CheckoutConfirmRequest(BaseModel):
+    session_id: str = Field(min_length=8, max_length=255)
 
 
 # ------------------------------------------------------------------- courses

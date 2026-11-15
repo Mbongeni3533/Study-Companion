@@ -68,6 +68,8 @@ class User(TimestampMixin, Base):
     subscription_status: Mapped[str] = mapped_column(
         String(24), default="pending", nullable=False, index=True
     )
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(255), index=True)
     daily_study_minutes: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -79,6 +81,20 @@ class User(TimestampMixin, Base):
     )
     counselling_sessions: Mapped[list["CounsellingSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class BillingEvent(Base):
+    """Idempotency record for Stripe webhook events."""
+
+    __tablename__ = "billing_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stripe_event_id: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
     )
 
 

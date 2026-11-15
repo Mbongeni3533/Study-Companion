@@ -1396,6 +1396,9 @@
                 ? "You are studying as a guest. Create an account from the sign-out screen to keep work across devices."
                 : "Your courses, documents and progress are tied to this account."
             }</p>
+            <div id="billing-panel" class="billing-panel">
+              <p class="small muted">Checking subscription options…</p>
+            </div>
             <button class="btn btn-danger" data-action="signout">${icon("logout")} Sign out</button>
           </div>
         </section>
@@ -1436,6 +1439,107 @@
         button.disabled = false;
       }
     });
+
+    loadBillingPanel();
+  }
+
+  async function loadBillingPanel() {
+    const panel = $("#billing-panel");
+    if (!panel || !state.user) return;
+    if (state.user.is_anonymous) {
+      panel.innerHTML = '<p class="small muted">Create an account to manage a subscription.</p>';
+      return;
+    }
+    try {
+      const info = await api("/billing/status");
+      const live = $("#billing-panel");
+      if (!live) return;
+      const status = info.subscription_status || "pending";
+      const label = status === "subscribed" ? "Subscribed" : status === "suspended" ? "Suspended" : "Pending";
+      const chip = status === "subscribed" ? "chip-emerald" : status === "suspended" ? "chip-rose" : "chip-amber";
+      let detail = "Billing is not configured yet. Contact the administrator.";
+      let action = "";
+      if (status === "subscribed") {
+        detail = "Your subscription is active.";
+      } else if (status === "suspended") {
+        detail = "This account is suspended. Contact the administrator.";
+      } else if (info.checkout_configured) {
+        detail = `Subscribe securely for ${info.price_label}.`;
+        action = `<button class="btn btn-primary btn-sm" type="button" id="billing-checkout">Subscribe</button>`;
+      } else if (info.activation_available) {
+        detail = "Activate your beta subscription. No payment is taken during the beta.";
+        action = `<button class="btn btn-primary btn-sm" type="button" id="billing-activate">Activate subscription</button>`;
+      }
+      live.innerHTML = `
+        <div class="doc-row" style="border:0;background:none;padding:0;">
+          <div class="doc-body">
+            <span class="doc-name">Subscription <span class="chip ${chip}">${label}</span></span>
+            <span class="doc-meta">${esc(detail)}</span>
+          </div>
+        </div>
+        ${action}`;
+
+      $("#billing-activate")?.addEventListener("click", async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Activating…";
+        try {
+          const updated = await api("/billing/activate", { method: "POST" });
+          state.user = updated;
+          persist();
+          renderChrome();
+          renderSettings();
+          toast("Subscription activated.", "success");
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = "Activate subscription";
+          toast(error.message || "Could not activate the subscription.", "error");
+        }
+      });
+
+      $("#billing-checkout")?.addEventListener("click", async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Opening checkout…";
+        try {
+          const result = await api("/billing/checkout", { method: "POST" });
+          window.location.href = result.url;
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = "Subscribe";
+          toast(error.message || "Could not start checkout.", "error");
+        }
+      });
+    } catch (error) {
+      const live = $("#billing-panel");
+      if (live) live.innerHTML = `<p class="small muted">${esc(error.message || "Subscription status is unavailable.")}</p>`;
+    }
+  }
+
+  async function handleBillingReturn() {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("billing");
+    if (!result) return;
+    if (result === "cancelled") {
+      toast("Checkout cancelled. Your plan has not changed.", "info");
+      history.replaceState(null, "", "#/settings");
+      return;
+    }
+    if (result !== "success") return;
+    const sessionId = params.get("session_id");
+    if (!sessionId) return;
+    try {
+      const updated = await api("/billing/checkout/confirm", {
+        method: "POST",
+        body: { session_id: sessionId },
+      });
+      state.user = updated;
+      persist();
+      toast("Subscription activated.", "success");
+    } catch (error) {
+      toast(error.message || "Could not confirm the checkout.", "error");
+    }
+    history.replaceState(null, "", "#/settings");
   }
 
   /* ----------------------------------------------------------------- modals */
@@ -2407,6 +2511,7 @@
       persist();
       showShell();
       await loadCourses();
+      await handleBillingReturn();
       render();
     } catch {
       signOut();
