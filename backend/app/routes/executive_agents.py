@@ -6,11 +6,13 @@ student-facing use.
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any, Literal
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -19,6 +21,7 @@ from ..models import Course, Document, DocumentAlertState, RemediationEvent, as_
 from ..schemas import (
     AIResearchResponse,
     ComplianceResponse,
+    DiagnosticFinding,
     DiagnosticsResponse,
     DocumentAlert,
     DocumentAlertActionRequest,
@@ -36,6 +39,7 @@ from .admin import _require_admin
 from .documents import _process_upload
 from ..services.topic_service import rebuild_course_topics
 from ..services.executive_agents import (
+    _format_bytes,
     ai_research_briefing,
     ceo_report,
     collect_document_alerts,
@@ -48,6 +52,171 @@ from ..services.executive_agents import (
 
 router = APIRouter(prefix="/admin/agents", tags=["admin-agents"])
 logger = logging.getLogger("study_companion.admin_agents")
+
+
+def _md_cell(value: Any) -> str:
+    return str(value if value is not None else "").replace("\\", "\\\\").replace("|", "\\|").replace("\n", "<br>").strip()
+
+
+def _report_metric_label(key: str) -> str:
+    labels = {
+        "ai_enabled": "AI provider",
+        "database": "Database engine",
+        "beta_invite_only": "Invite-only beta",
+        "allow_anonymous_sessions": "Guest sessions",
+    }
+    if key in labels:
+        return labels[key]
+    return key.removesuffix("_bytes").replace("_", " ").strip().title()
+
+
+def _report_metric_value(key: str, value: Any) -> str:
+    if key.endswith("_bytes"):
+        return _format_bytes(value)
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if value is None:
+        return "—"
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _markdown_report(
+    diagnostics: DiagnosticsResponse,
+    changes: list[RemediationChange],
+    history_limit: int,
+) -> str:
+    lines = [
+        "# Study Companion System Health Report",
+        "",
+        f"- Generated: {diagnostics.generated_at.isoformat()}",
+        f"- AI-assisted plan: {'Yes' if diagnostics.ai_used else 'No'}",
+        f"- Remediation history limit: {history_limit} most recent record(s)",
+        "",
+        "## Metrics",
+        "",
+        "| Metric | Value |",
+        "| --- | --- |",
+    ]
+    for key, value in diagnostics.metrics.items():
+        lines.append(f"| {_md_cell(_report_metric_label(key))} | {_md_cell(_report_metric_value(key, value))} |")
+
+    lines.extend(["", "## Findings", ""])
+    if not diagnostics.findings:
+        lines.append("No findings were returned.")
+    for index, finding in enumerate(diagnostics.findings, start=1):
+        lines.extend(
+            [
+                f"### {index}. {finding.severity.title()} · {_md_cell(finding.area.replace('_', ' ').title())}",
+                "",
+                finding.message,
+                "",
+            ]
+        )
+        if finding.suggested_action:
+            lines.extend([f"Suggested action: {finding.suggested_action}", ""])
+
+    lines.extend(["## Document Alerts", ""])
+    if not diagnostics.alerts:
+        lines.append("No document alerts.")
+    for index, alert in enumerate(diagnostics.alerts, start=1):
+        tracking = alert.tracking
+        lines.extend(
+            [
+                f"### {index}. {_md_cell(alert.filename)}",
+                "",
+                f"- Document ID: `{alert.document_id}`",
+                f"- Status: {alert.status}{' (stale)' if alert.stale else ''}",
+                f"- Course: {_md_cell(alert.course_title or alert.course_id or '—')}",
+                f"- Idle: {f'{alert.age_minutes} min' if alert.age_minutes is not None else '—'}",
+                f"- Alert action: {alert.action}",
+                f"- Error: {_md_cell(alert.error or '—')}",
+                f"- Tracking: {tracking.status}",
+                f"- Tracking updated: {tracking.updated_at.isoformat() if tracking.updated_at else '—'}",
+            ]
+        )
+        if tracking.acknowledged_at:
+            lines.append(f"- Acknowledged: {tracking.acknowledged_at.isoformat()}")
+        if tracking.snoozed_until:
+            lines.append(f"- Snoozed until: {tracking.snoozed_until.isoformat()}")
+        if tracking.resolved_at:
+            lines.append(f"- Resolved: {tracking.resolved_at.isoformat()}")
+        if tracking.note:
+            lines.append(f"- Internal note: {_md_cell(tracking.note)}")
+        lines.append("")
+
+    lines.extend(["## Remediation History", ""])
+    if not changes:
+        lines.append("No remediation history recorded.")
+    else:
+        lines.extend(
+            [
+                "| Timestamp | Action | Document | Detail |",
+                "| --- | --- | --- | --- |",
+            ]
+        )
+        for change in changes:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _md_cell(change.created_at.isoformat()),
+                        _md_cell(change.action),
+                        _md_cell(change.document_filename or change.document_id or "—"),
+                        _md_cell(change.detail or "—"),
+                    ]
+                )
+                + " |"
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
+@router.get("/sysadmin/report")
+async def sysadmin_diagnostic_report(
+    report_format: Literal["markdown", "json"] = Query(default="markdown", alias="format"),
+    history_limit: int = Query(default=200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin),
+) -> Response:
+    """Download the current system-health report as Markdown or JSON."""
+    findings, metrics, alerts, ai_used = await sysadmin_diagnose(db)
+    diagnostics = DiagnosticsResponse(
+        generated_at=datetime.now(timezone.utc),
+        findings=[DiagnosticFinding(**finding) for finding in findings],
+        metrics=metrics,
+        alerts=[DocumentAlert(**alert) for alert in alerts],
+        ai_used=ai_used,
+    )
+    changes = [
+        RemediationChange.model_validate(change)
+        for change in recent_remediation_changes(db, limit=history_limit)
+    ]
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
+    if report_format == "markdown":
+        content = _markdown_report(diagnostics, changes, history_limit)
+        media_type = "text/markdown; charset=utf-8"
+        extension = "md"
+    else:
+        payload = diagnostics.model_dump(mode="json")
+        payload["document_alerts"] = payload.pop("alerts")
+        payload["report_type"] = "study_companion_system_health"
+        payload["stale_after_minutes"] = get_settings().stale_processing_minutes
+        payload["remediation_history"] = [change.model_dump(mode="json") for change in changes]
+        payload["remediation_history_limit"] = history_limit
+        content = json.dumps(payload, indent=2, ensure_ascii=False)
+        media_type = "application/json; charset=utf-8"
+        extension = "json"
+    filename = f"study-companion-diagnostics-{timestamp}.{extension}"
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/ceo/report", response_model=ExecutiveReportResponse)
@@ -70,7 +239,6 @@ async def sysadmin_diagnostics(
     _: None = Depends(_require_admin),
 ) -> DiagnosticsResponse:
     findings, metrics, alerts, ai_used = await sysadmin_diagnose(db)
-    from ..schemas import DiagnosticFinding
 
     return DiagnosticsResponse(
         generated_at=datetime.now(timezone.utc),

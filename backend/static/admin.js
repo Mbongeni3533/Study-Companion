@@ -347,6 +347,48 @@
     }
   }
 
+  async function downloadDiagnosticReport(format) {
+    const button = $(format === "markdown" ? "#health-report-md" : "#health-report-json");
+    if (!button) return;
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Preparing...";
+    showHealthStatus(`Preparing the ${format === "markdown" ? "Markdown" : "JSON"} diagnostic report…`);
+    try {
+      const response = await fetch(`/admin/agents/sysadmin/report?format=${encodeURIComponent(format)}`, {
+        credentials: "same-origin",
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const extension = format === "markdown" ? "md" : "json";
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filename = match ? match[1] : `study-companion-diagnostics-${stamp}.${extension}`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showHealthStatus(`Downloaded ${filename}.`);
+    } catch (error) {
+      showHealthStatus(error.message || "Could not download the diagnostic report.", false);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
   function updateRemediationSelection() {
     const host = $("#health-remediation");
     if (!host) return;
@@ -999,6 +1041,8 @@
   $("#admin-key-form").addEventListener("submit", signIn);
   $("#admin-refresh").addEventListener("click", loadFeedback);
   $("#health-refresh").addEventListener("click", loadSystemHealth);
+  $("#health-report-md").addEventListener("click", () => downloadDiagnosticReport("markdown"));
+  $("#health-report-json").addEventListener("click", () => downloadDiagnosticReport("json"));
   setInterval(updateHealthBannerAge, 30000);
   $("#health-bulk-preview").addEventListener("click", (event) => {
     runRemediationScan({ dryRun: true, button: event.currentTarget });
