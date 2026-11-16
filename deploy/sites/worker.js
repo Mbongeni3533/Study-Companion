@@ -15,7 +15,23 @@
  * this Worker only.
  */
 
-const UPSTREAM_ORIGIN = "https://study-companion-o7k3.onrender.com";
+const DEFAULT_UPSTREAM_ORIGIN = "https://study-companion-o7k3.onrender.com";
+
+/**
+ * Upstream API origin. Set the `UPSTREAM_ORIGIN` variable on the site to point
+ * a preview at a staging or local backend; without it the deployed service is
+ * used, so existing deployments keep working unchanged.
+ */
+function resolveUpstreamOrigin(env) {
+  const configured = String((env && env.UPSTREAM_ORIGIN) || "").trim();
+  if (!configured) return DEFAULT_UPSTREAM_ORIGIN;
+  try {
+    return new URL(configured).origin;
+  } catch {
+    console.error("Invalid UPSTREAM_ORIGIN, using the default:", configured);
+    return DEFAULT_UPSTREAM_ORIGIN;
+  }
+}
 
 /** Bumped when the frontend changes; mirrors the backend's asset versioning. */
 const ASSET_VERSION = "20261116a";
@@ -74,8 +90,8 @@ async function serveShell(env, request) {
   return new Response(html, { status: response.status, headers });
 }
 
-async function proxyToUpstream(request, url) {
-  const upstream = new URL(url.pathname + url.search, UPSTREAM_ORIGIN);
+async function proxyToUpstream(request, url, upstreamOrigin) {
+  const upstream = new URL(url.pathname + url.search, upstreamOrigin);
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.set("X-Forwarded-Host", url.host);
@@ -102,8 +118,8 @@ async function proxyToUpstream(request, url) {
   // Keep redirects on the preview origin instead of leaking the upstream host.
   const location = outHeaders.get("location");
   if (location) {
-    const target = new URL(location, UPSTREAM_ORIGIN);
-    if (target.origin === UPSTREAM_ORIGIN) {
+    const target = new URL(location, upstreamOrigin);
+    if (target.origin === upstreamOrigin) {
       outHeaders.set("location", target.pathname + target.search);
     }
   }
@@ -120,7 +136,7 @@ export default {
     const path = url.pathname;
 
     if (isApiPath(path)) {
-      return proxyToUpstream(request, url);
+      return proxyToUpstream(request, url, resolveUpstreamOrigin(env));
     }
 
     if (path === "/" || path === "/index.html") {
