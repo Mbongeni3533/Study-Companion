@@ -109,6 +109,25 @@ class RemediationEvent(Base):
     )
 
 
+class AdminNotificationState(Base):
+    """Deduplication state for operational admin alerts.
+
+    One row stays active while an issue is present, so a recurring sweep emails
+    once per issue rather than on every run. ``resolved_at`` is set when the
+    issue disappears; a later recurrence reuses and reactivates the row.
+    """
+
+    __tablename__ = "admin_notification_states"
+
+    fingerprint: Mapped[str] = mapped_column(String(300), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, nullable=False
+    )
+    last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+
 class BillingEvent(Base):
     """Idempotency record for Stripe webhook events."""
 

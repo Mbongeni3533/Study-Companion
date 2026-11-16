@@ -80,6 +80,43 @@ def send_subscription_cancelled_email(to_email: str, settings_url: str) -> dict:
     )
 
 
+def send_admin_alert_email(
+    to_email: str,
+    subject: str,
+    heading: str,
+    intro: str,
+    items: list[dict[str, str]],
+    admin_url: str,
+) -> dict:
+    """Send one batched operational alert to the operator."""
+    safe_heading = html.escape(heading)
+    safe_intro = html.escape(intro)
+    safe_url = html.escape(admin_url)
+    text_lines = [heading, "", intro, ""]
+    html_items: list[str] = []
+    for item in items:
+        title = item.get("title", "Issue")
+        detail = item.get("detail", "")
+        text_lines.append(f"- {title}: {detail}" if detail else f"- {title}")
+        html_items.append(
+            f"<li><strong>{html.escape(title)}</strong>"
+            + (f"<br>{html.escape(detail)}" if detail else "")
+            + "</li>"
+        )
+    text_lines.extend(["", f"Open the admin dashboard: {admin_url}"])
+    return _send_email(
+        to_email,
+        subject,
+        "\n".join(text_lines),
+        (
+            f"<p><strong>{safe_heading}</strong></p>"
+            f"<p>{safe_intro}</p>"
+            f"<ul>{''.join(html_items)}</ul>"
+            f'<p><a href="{safe_url}">Open the admin dashboard</a></p>'
+        ),
+    )
+
+
 def send_admin_subscription_event_email(
     to_email: str,
     action: str,

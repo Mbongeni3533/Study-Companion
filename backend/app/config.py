@@ -46,8 +46,11 @@ class Settings(BaseSettings):
     beta_invite_codes: str = ""
     # Shared secret for the beta admin endpoints (X-Admin-Key header).
     beta_admin_key: str = ""
-    # Where subscriber cancellation and billing-change alerts are emailed.
+    # Where subscriber, billing and operational admin alerts are emailed.
     admin_notification_email: str = ""
+    # How often failed/stale documents and system-health problems are checked
+    # for admin notification, even when nobody has the dashboard open.
+    admin_notification_interval_minutes: int = 15
     # Optional public Google Doc with beta registration and feedback instructions.
     registration_doc_url: str = "https://docs.google.com/document/d/1PWpMViVx-JaVEbgsMR84oROHmxXr9YPHoqL3qpT5qnM/edit"
 

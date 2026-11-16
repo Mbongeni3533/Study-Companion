@@ -6,6 +6,7 @@ Or:           uvicorn main:app --reload --port 8000
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -22,6 +23,7 @@ from app.config import get_settings
 from app.database import get_db, init_db
 from app.routes import admin, assessment, auth, billing, chat, documents, executive_agents, feedback, progress, resources, tasks, toolbox
 from app.schemas import HealthResponse
+from app.services.admin_notifications import run_admin_notification_sweep
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("study_companion")
@@ -53,6 +55,19 @@ def asset_version() -> str:
     return str(stamp)
 
 
+async def _admin_notification_loop(stop: asyncio.Event) -> None:
+    interval = max(60, int(settings.admin_notification_interval_minutes) * 60)
+    while not stop.is_set():
+        try:
+            await asyncio.to_thread(run_admin_notification_sweep)
+        except Exception:  # noqa: BLE001 - a failed sweep must not stop the app
+            logger.exception("Admin notification sweep failed")
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
@@ -63,7 +78,13 @@ async def lifespan(_app: FastAPI):
         "sqlite" if settings.is_sqlite else "postgres",
         "anthropic" if settings.ai_enabled else "rule-based (no ANTHROPIC_API_KEY)",
     )
-    yield
+    stop_notifications = asyncio.Event()
+    notification_task = asyncio.create_task(_admin_notification_loop(stop_notifications))
+    try:
+        yield
+    finally:
+        stop_notifications.set()
+        await notification_task
 
 
 app = FastAPI(
