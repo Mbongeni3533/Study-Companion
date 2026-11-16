@@ -237,6 +237,130 @@ def gateway_smoke() -> str:
     return f"route {COACH_ROUTE} -> claude-sonnet-4-5 at the fixture, {answer.citations}"
 
 
+def remediation_scope() -> str:
+    """Per-document remediation must not spill over; bulk must take all stale docs."""
+    from datetime import timedelta
+
+    from fastapi.testclient import TestClient
+
+    from app.database import SessionLocal
+    from app.models import Course, Document, RemediationEvent, User
+    from app.routes.admin import _require_admin
+    from app.utils.auth import generate_course_id, generate_document_id, generate_user_id
+    from main import app
+
+    now = datetime.now(timezone.utc)
+    old = now - timedelta(minutes=120)
+    db = SessionLocal()
+    user = User(
+        id=generate_user_id(),
+        email=f"remediation-scope-{int(now.timestamp())}@example.com",
+        name="Remediation Scope Test",
+    )
+    course = Course(id=generate_course_id(), user_id=user.id, title="Remediation Scope Course")
+    selected = Document(
+        id=generate_document_id(),
+        course_id=course.id,
+        filename="scope-selected.txt",
+        status="processing",
+        progress_stage="ocr",
+        progress_current=2,
+        progress_total=8,
+        created_at=old,
+        updated_at=old,
+    )
+    other_stale = [
+        Document(
+            id=generate_document_id(),
+            course_id=course.id,
+            filename=f"scope-other-{index}.txt",
+            status="processing",
+            progress_stage="extract",
+            progress_current=1,
+            progress_total=4,
+            created_at=old,
+            updated_at=old,
+        )
+        for index in (1, 2)
+    ]
+    failed = Document(
+        id=generate_document_id(),
+        course_id=course.id,
+        filename="scope-manual-review.txt",
+        status="failed",
+        error_message="Keep this failure for manual review",
+        created_at=old,
+        updated_at=old,
+    )
+    db.add_all([user, course, selected, *other_stale, failed])
+    db.commit()
+    document_ids = [selected.id, *(document.id for document in other_stale), failed.id]
+
+    try:
+        with TestClient(app) as client:
+            app.dependency_overrides[_require_admin] = lambda: None
+            try:
+                single = client.post(
+                    f"/admin/agents/sysadmin/remediate?dry_run=false&document_id={selected.id}"
+                )
+                assert single.status_code == 200, single.text
+                single_data = single.json()
+                assert [candidate["document_id"] for candidate in single_data["candidates"]] == [selected.id]
+                assert [change["document_id"] for change in single_data["changes"]] == [selected.id]
+
+                db.expire_all()
+                assert db.get(Document, selected.id).status == "failed", "selected document was not failed"
+                assert all(
+                    db.get(Document, document.id).status == "processing"
+                    for document in other_stale
+                ), "per-document remediation changed another stale document"
+                assert db.get(Document, failed.id).status == "failed"
+                assert db.get(Document, failed.id).error_message == "Keep this failure for manual review"
+
+                bulk = client.post("/admin/agents/sysadmin/remediate?dry_run=false")
+                assert bulk.status_code == 200, bulk.text
+                bulk_data = bulk.json()
+                assert {candidate["document_id"] for candidate in bulk_data["candidates"]} == {
+                    document.id for document in other_stale
+                }
+                assert {change["document_id"] for change in bulk_data["changes"]} == {
+                    document.id for document in other_stale
+                }
+
+                db.expire_all()
+                assert all(
+                    db.get(Document, document.id).status == "failed"
+                    for document in other_stale
+                ), "bulk remediation left a stale document processing"
+                manual = db.get(Document, failed.id)
+                assert manual.status == "failed"
+                assert manual.error_message == "Keep this failure for manual review"
+                assert not (
+                    db.query(RemediationEvent)
+                    .filter(RemediationEvent.document_id == failed.id)
+                    .count()
+                ), "bulk remediation changed a failed document"
+            finally:
+                app.dependency_overrides.pop(_require_admin, None)
+        return f"selected 1 of 3 stale documents; bulk handled {len(other_stale)}; failed document untouched"
+    finally:
+        db.rollback()
+        db.expire_all()
+        db.query(RemediationEvent).filter(RemediationEvent.document_id.in_(document_ids)).delete(
+            synchronize_session=False
+        )
+        for document_id in document_ids:
+            document = db.get(Document, document_id)
+            if document is not None:
+                db.delete(document)
+        for model, record_id in ((Course, course.id), (User, user.id)):
+            record = db.get(model, record_id)
+            if record is not None:
+                db.delete(record)
+        db.commit()
+        db.close()
+
+
 def models() -> str:
     from app.models import User
 
@@ -263,6 +387,7 @@ for name, fn in [
     ("Study plan (rules)", coach_plan),
     ("OCR fallback", ocr_fallback),
     ("Gateway routing", gateway_smoke),
+    ("Remediation scope", remediation_scope),
     ("Models", models),
 ]:
     check(name, fn)
