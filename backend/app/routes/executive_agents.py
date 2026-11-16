@@ -6,6 +6,7 @@ student-facing use.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from ..schemas import (
     ComplianceResponse,
     DiagnosticsResponse,
     DocumentAlert,
+    DocumentDeleteResponse,
     DocumentRetryResponse,
     ExecutiveReportResponse,
     RemediationAction,
@@ -28,6 +30,7 @@ from ..schemas import (
 )
 from .admin import _require_admin
 from .documents import _process_upload
+from ..services.topic_service import rebuild_course_topics
 from ..services.executive_agents import (
     ai_research_briefing,
     ceo_report,
@@ -39,6 +42,7 @@ from ..services.executive_agents import (
 )
 
 router = APIRouter(prefix="/admin/agents", tags=["admin-agents"])
+logger = logging.getLogger("study_companion.admin_agents")
 
 
 @router.get("/ceo/report", response_model=ExecutiveReportResponse)
@@ -170,6 +174,64 @@ def retry_failed_document(
         document_id=document.id,
         filename=document.filename,
         message=f"Retry queued for {document.filename}. Processing has restarted.",
+    )
+
+
+@router.delete(
+    "/sysadmin/documents/{document_id}", response_model=DocumentDeleteResponse
+)
+def delete_failed_document(
+    document_id: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin),
+) -> DocumentDeleteResponse:
+    """Permanently delete one failed document and its stored original."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if document.status != "failed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only failed documents can be deleted from this control.",
+        )
+
+    course = db.get(Course, document.course_id)
+    filename = document.filename
+    previous_error = (document.error_message or "No error message was recorded.").strip()
+    had_chunks = bool(document.chunks)
+    source = Path(document.storage_path) if document.storage_path else None
+    source_status = "no stored source"
+    if source is not None:
+        try:
+            source.unlink(missing_ok=True)
+            source_status = "source removed" if not source.exists() else "source still present"
+        except OSError as exc:
+            source_status = "source cleanup failed"
+            logger.warning("Could not remove failed document source %s: %s", source, exc)
+
+    db.add(
+        RemediationEvent(
+            action="delete_failed_document",
+            document_id=document.id,
+            document_filename=filename,
+            detail=(
+                f"Manual delete of failed document; {source_status}; "
+                f"previous error: {previous_error[:500]}"
+            ),
+        )
+    )
+    db.delete(document)
+    db.flush()
+    if had_chunks and course is not None:
+        rebuild_course_topics(db, course)
+    else:
+        db.commit()
+
+    return DocumentDeleteResponse(
+        generated_at=datetime.now(timezone.utc),
+        document_id=document_id,
+        filename=filename,
+        message=f"Deleted {filename}. The audit record was kept.",
     )
 
 

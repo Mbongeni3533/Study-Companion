@@ -540,6 +540,13 @@ class DocumentRetryResponse(BaseModel):
     message: str
 
 
+class DocumentDeleteResponse(BaseModel):
+    generated_at: datetime
+    document_id: str
+    filename: str
+    message: str
+
+
 class RemediationResponse(BaseModel):
     generated_at: datetime
     dry_run: bool = True

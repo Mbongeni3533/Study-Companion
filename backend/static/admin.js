@@ -108,6 +108,7 @@
                   <button class="btn btn-ghost btn-sm admin-danger" type="button" data-health-action="apply" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Mark this failed</button>
                 </div>` : `<div class="health-alert-actions">
                   <button class="btn btn-ghost btn-sm" type="button" data-health-action="retry" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Retry processing</button>
+                  <button class="btn btn-ghost btn-sm admin-danger" type="button" data-health-action="delete" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Delete document</button>
                   <span class="health-alert-note">Or leave for manual review</span>
                 </div>`}
               </div>
@@ -240,6 +241,35 @@
       showHealthStatus((data && data.message) || `Retry queued for ${documentName}.`);
     } catch (error) {
       showHealthStatus(error.message || "Could not retry this document.", false);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  async function deleteFailedDocument({ documentId, documentName, button }) {
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Deleting...";
+    showHealthStatus(`Deleting ${documentName}…`);
+    try {
+      const response = await fetch(`/admin/agents/sysadmin/documents/${encodeURIComponent(documentId)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (response.status === 404 || response.status === 409) {
+        await loadSystemHealth();
+      }
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      await loadSystemHealth();
+      showHealthStatus((data && data.message) || `Deleted ${documentName}.`);
+    } catch (error) {
+      showHealthStatus(error.message || "Could not delete this document.", false);
     } finally {
       button.disabled = false;
       button.textContent = original;
@@ -743,10 +773,15 @@
     const action = button.dataset.healthAction;
     const documentId = button.dataset.documentId;
     if (!documentId) return;
+    const name = button.dataset.documentName || "this document";
     if (action === "retry") {
-      const name = button.dataset.documentName || "this document";
       if (!window.confirm(`Retry processing for "${name}"? The saved original file will be processed again and may take a few minutes.`)) return;
       retryDocument({ documentId, documentName: name, button });
+      return;
+    }
+    if (action === "delete") {
+      if (!window.confirm(`Permanently delete "${name}"? This removes the document, its processed content, and the saved original file. It cannot be undone. Failed documents otherwise remain for manual review.`)) return;
+      deleteFailedDocument({ documentId, documentName: name, button });
       return;
     }
     if (action === "preview") {
@@ -754,7 +789,6 @@
       return;
     }
     if (action === "apply") {
-      const name = button.dataset.documentName || "this document";
       if (!window.confirm(`Mark "${name}" failed? This affects only this document. Failed documents will remain available for manual review.`)) return;
       runRemediationScan({ dryRun: false, documentId, button });
     }
