@@ -19,7 +19,7 @@
       </div>
       <div style="flex:1;min-width:240px;">
         <h1>Admin dashboard</h1>
-        <p class="sub">Monitor subscribers, invite links and student feedback from one place.</p>
+        <p class="sub">Monitor system health, subscribers, invite links and student feedback from one place.</p>
       </div>
       <a class="btn btn-ghost" href="/">Back to app</a>
     </header>
@@ -49,6 +49,25 @@
     </section>
 
     <div class="admin-grid" id="admin-content" hidden>
+      <section class="card" id="system-health">
+        <div class="card-head">
+          <div>
+            <h2>System health</h2>
+            <p class="card-sub" id="health-summary">Run diagnostics to check the system.</p>
+          </div>
+          <div class="card-head-actions">
+            <button class="btn btn-ghost btn-sm" type="button" id="health-refresh">Run diagnostics</button>
+            <button class="btn btn-primary btn-sm" type="button" id="health-remediate">Run remediation scan</button>
+          </div>
+        </div>
+        <p class="small muted" id="health-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="health-metrics" id="health-metrics">
+          <div class="admin-empty">Enter the admin key to see system metrics.</div>
+        </div>
+        <div class="health-findings" id="health-findings"></div>
+        <div class="health-remediation" id="health-remediation" hidden></div>
+      </section>
+
       <section class="card">
         <div class="card-head">
           <div>

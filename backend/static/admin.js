@@ -23,6 +23,166 @@
 
   const inviteLink = (code) => `${window.location.origin}/?invite=${encodeURIComponent(code)}`;
 
+  const HEALTH_METRIC_LABELS = {
+    users_total: "Users",
+    users_anonymous: "Anonymous users",
+    courses_total: "Courses",
+    documents_total: "Documents",
+    documents_ready: "Ready documents",
+    documents_failed: "Failed documents",
+    documents_processing: "Processing documents",
+    topics_total: "Topics",
+    chunks_total: "Text chunks",
+    feedback_total: "Feedback",
+    feedback_unresolved: "Unresolved feedback",
+    invite_codes_total: "Invite codes",
+    invite_codes_active: "Active invites",
+    invite_codes_exhausted: "Exhausted invites",
+    study_minutes_total: "Study minutes",
+    ai_enabled: "AI provider",
+    beta_invite_only: "Invite-only beta",
+    allow_anonymous_sessions: "Guest sessions",
+    database: "Database",
+    environment: "Environment",
+  };
+
+  function healthMetricLabel(key) {
+    return HEALTH_METRIC_LABELS[key] || key.replace(/_/g, " ").replace(/^./, (char) => char.toUpperCase());
+  }
+
+  function healthMetricValue(key, value) {
+    if (typeof value === "boolean") {
+      if (key === "ai_enabled") return value ? "Enabled" : "Rules only";
+      return value ? "Yes" : "No";
+    }
+    if (key === "database") return value === "postgres" ? "PostgreSQL" : "SQLite";
+    if (typeof value === "number") return value.toLocaleString();
+    return String(value ?? "—");
+  }
+
+  function showHealthStatus(message, ok = true) {
+    const node = $("#health-status");
+    if (!node) return;
+    node.textContent = message || "";
+    node.classList.toggle("admin-status-ok", Boolean(message) && ok);
+    node.classList.toggle("admin-status-error", Boolean(message) && !ok);
+  }
+
+  function renderSystemHealth(data) {
+    const metrics = data.metrics || {};
+    $("#health-summary").textContent = `Generated ${fmtDate(data.generated_at)} · ${data.ai_used ? "AI-assisted plan" : "Rule-based plan"}`;
+
+    const order = Object.keys(HEALTH_METRIC_LABELS);
+    const entries = Object.entries(metrics).sort(([a], [b]) => {
+      const ai = order.indexOf(a);
+      const bi = order.indexOf(b);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi) || a.localeCompare(b);
+    });
+    $("#health-metrics").innerHTML = entries.length
+      ? entries
+          .map(
+            ([key, value]) => `
+              <div class="health-metric">
+                <strong>${esc(healthMetricValue(key, value))}</strong>
+                <span>${esc(healthMetricLabel(key))}</span>
+              </div>`
+          )
+          .join("")
+      : '<div class="admin-empty">No metrics were returned.</div>';
+
+    const findings = Array.isArray(data.findings) ? data.findings : [];
+    $("#health-findings").innerHTML = findings.length
+      ? findings
+          .map((finding) => {
+            const severity = ["error", "warning", "info"].includes(finding.severity) ? finding.severity : "info";
+            return `
+              <article class="health-finding health-finding--${severity}">
+                <span class="health-severity">${esc(severity)}</span>
+                <div class="health-finding-body">
+                  <strong>${esc(finding.area || "system")}</strong>
+                  <p>${esc(finding.message || "")}</p>
+                  ${finding.suggested_action ? `<span class="health-action">Action: ${esc(finding.suggested_action)}</span>` : ""}
+                </div>
+              </article>`;
+          })
+          .join("")
+      : '<div class="admin-empty">No findings. The system looks healthy.</div>';
+  }
+
+  async function loadSystemHealth() {
+    const button = $("#health-refresh");
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Running...";
+    showHealthStatus("Running diagnostics…");
+    try {
+      const response = await fetch("/admin/agents/sysadmin/diagnostics", {
+        credentials: "same-origin",
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      renderSystemHealth(data || {});
+      const count = Array.isArray(data && data.findings) ? data.findings.length : 0;
+      showHealthStatus(`Diagnostics complete: ${count} finding${count === 1 ? "" : "s"}.`);
+    } catch (error) {
+      $("#health-metrics").innerHTML = '<div class="admin-empty">System metrics could not be loaded.</div>';
+      $("#health-findings").innerHTML = "";
+      showHealthStatus(error.message || "Could not run diagnostics.", false);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  function renderRemediation(data) {
+    const host = $("#health-remediation");
+    const actions = Array.isArray(data.actions) ? data.actions : [];
+    const remaining = Array.isArray(data.remaining_issues) ? data.remaining_issues : [];
+    host.hidden = false;
+    host.innerHTML = `
+      <div class="health-remediation-head">
+        <h3>Remediation scan</h3>
+        <span>${esc(fmtDate(data.generated_at))}</span>
+      </div>
+      ${actions.length ? `<ul>${actions
+        .map(
+          (action) => `<li><strong>${esc(action.action || "check")}</strong><span>${esc(action.affected ?? 0)} affected</span>${action.detail ? `<span>${esc(action.detail)}</span>` : ""}</li>`
+        )
+        .join("")}</ul>` : '<div class="admin-empty">No checks were returned.</div>'}
+      ${remaining.length ? `<p class="health-remaining">Needs manual review: ${remaining.map((item) => esc(item)).join(" ")}</p>` : ""}`;
+  }
+
+  async function runRemediationScan() {
+    const button = $("#health-remediate");
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Running scan...";
+    showHealthStatus("Running remediation scan…");
+    try {
+      const response = await fetch("/admin/agents/sysadmin/remediate", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      renderRemediation(data || {});
+      showHealthStatus("Remediation scan complete. No automatic changes were made.");
+    } catch (error) {
+      showHealthStatus(error.message || "Could not run the remediation scan.", false);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
   function showInviteError(message) {
     const node = $("#invite-error");
     node.hidden = !message;
@@ -395,7 +555,7 @@
     $("#admin-session").hidden = false;
     $("#admin-content").hidden = false;
     showError("");
-    await Promise.all([loadSubscribers(), loadFeedback(), loadInvites()]);
+    await Promise.all([loadSystemHealth(), loadSubscribers(), loadFeedback(), loadInvites()]);
   }
 
   function showLogin(message = "") {
@@ -464,6 +624,8 @@
 
   $("#admin-key-form").addEventListener("submit", signIn);
   $("#admin-refresh").addEventListener("click", loadFeedback);
+  $("#health-refresh").addEventListener("click", loadSystemHealth);
+  $("#health-remediate").addEventListener("click", runRemediationScan);
   $("#subscriber-refresh").addEventListener("click", loadSubscribers);
   $("#invite-refresh").addEventListener("click", loadInvites);
   $("#invite-form").addEventListener("submit", createInvite);
