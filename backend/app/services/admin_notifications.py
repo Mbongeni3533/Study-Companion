@@ -21,7 +21,7 @@ from ..config import Settings, get_settings
 from ..database import SessionLocal
 from ..models import AdminNotificationState
 from .email import send_admin_alert_email
-from .executive_agents import collect_document_alerts
+from .executive_agents import collect_capacity, collect_document_alerts
 
 logger = logging.getLogger("study_companion.admin_notifications")
 
@@ -177,6 +177,18 @@ def _notify_database_failure(
         _last_database_alert_at = now
 
 
+def _record_capacity_sample() -> None:
+    """Keep hourly storage samples flowing even when no email is configured."""
+    db = SessionLocal()
+    try:
+        collect_capacity(db)
+    except Exception as exc:  # noqa: BLE001 - sampling must not stop the sweep
+        db.rollback()
+        logger.warning("System-health capacity sample failed: %s", exc)
+    finally:
+        db.close()
+
+
 def run_admin_notification_sweep() -> int:
     """Check for operational issues and email newly-seen ones.
 
@@ -185,6 +197,7 @@ def run_admin_notification_sweep() -> int:
     same issue returns later.
     """
     settings = get_settings()
+    _record_capacity_sample()
     recipients = _recipients(settings)
     if not recipients:
         return 0

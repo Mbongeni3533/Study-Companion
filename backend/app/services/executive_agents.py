@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -23,6 +24,7 @@ from ..models import (
     InviteCode,
     RemediationEvent,
     StudyLog,
+    SystemHealthSnapshot,
     Topic,
     User,
     as_utc,
@@ -146,6 +148,160 @@ def _alert_tracking(
     }
 
 
+CAPACITY_WINDOW = timedelta(days=7)
+CAPACITY_SNAPSHOT_INTERVAL = timedelta(hours=1)
+CAPACITY_SNAPSHOT_RETENTION = timedelta(days=30)
+
+
+def _format_bytes(value: int | float | None) -> str:
+    if value is None:
+        return "unknown"
+    size = float(value)
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if abs(size) < 1024 or unit == "TB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
+def collect_data_integrity(db: Session) -> tuple[dict[str, int], list[str]]:
+    """Check referential and file-storage integrity for the admin dashboard."""
+    orphaned_chunks = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Chunk)
+            .outerjoin(Document, Chunk.document_id == Document.id)
+            .outerjoin(Course, Chunk.course_id == Course.id)
+            .where(or_(Document.id.is_(None), Course.id.is_(None)))
+        )
+        or 0
+    )
+    ready_without_chunks = int(
+        db.scalar(
+            select(func.count(Document.id))
+            .select_from(Document)
+            .outerjoin(Chunk, Chunk.document_id == Document.id)
+            .where(Document.status == "ready", Chunk.id.is_(None))
+        )
+        or 0
+    )
+    missing_files: list[str] = []
+    documents = db.scalars(
+        select(Document).where(Document.storage_path.is_not(None))
+    ).all()
+    for document in documents:
+        try:
+            present = Path(document.storage_path or "").is_file()
+        except (OSError, ValueError):
+            present = False
+        if not present:
+            missing_files.append(document.filename)
+    metrics = {
+        "orphaned_chunks": orphaned_chunks,
+        "ready_documents_without_chunks": ready_without_chunks,
+        "missing_stored_files": len(missing_files),
+    }
+    return metrics, missing_files
+
+
+def _database_size_bytes(db: Session) -> int | None:
+    bind = db.get_bind()
+    if bind.dialect.name == "sqlite":
+        database = bind.url.database
+        if not database or database == ":memory:":
+            return None
+        base = Path(database)
+        total = 0
+        for candidate in (base, Path(f"{base}-wal"), Path(f"{base}-shm")):
+            try:
+                if candidate.is_file():
+                    total += candidate.stat().st_size
+            except OSError:
+                continue
+        return total
+    if bind.dialect.name == "postgresql":
+        try:
+            value = db.scalar(text("SELECT pg_database_size(current_database())"))
+            return int(value) if value is not None else None
+        except Exception as exc:  # noqa: BLE001 - capacity is best-effort
+            logger.warning("Could not measure PostgreSQL database size: %s", exc)
+    return None
+
+
+def _upload_usage() -> tuple[int, int]:
+    directory = get_settings().upload_dir
+    total = 0
+    count = 0
+    try:
+        if not directory.exists():
+            return 0, 0
+        for path in directory.rglob("*"):
+            try:
+                if path.is_file():
+                    total += path.stat().st_size
+                    count += 1
+            except OSError:
+                continue
+    except OSError as exc:
+        logger.warning("Could not measure upload storage: %s", exc)
+    return total, count
+
+
+def collect_capacity(db: Session) -> dict[str, Any]:
+    """Measure storage sizes and growth from hourly snapshots."""
+    now = _now()
+    database_size = _database_size_bytes(db)
+    upload_size, upload_count = _upload_usage()
+
+    baseline = db.scalars(
+        select(SystemHealthSnapshot)
+        .where(
+            SystemHealthSnapshot.created_at >= now - CAPACITY_WINDOW,
+            SystemHealthSnapshot.created_at <= now - CAPACITY_SNAPSHOT_INTERVAL,
+        )
+        .order_by(SystemHealthSnapshot.created_at.asc(), SystemHealthSnapshot.id.asc())
+        .limit(1)
+    ).first()
+
+    database_growth: int | None = None
+    upload_growth: int | None = None
+    if baseline is not None:
+        if database_size is not None and baseline.database_size_bytes is not None:
+            database_growth = database_size - baseline.database_size_bytes
+        upload_growth = upload_size - baseline.upload_size_bytes
+
+    latest = db.scalars(
+        select(SystemHealthSnapshot)
+        .order_by(SystemHealthSnapshot.created_at.desc(), SystemHealthSnapshot.id.desc())
+        .limit(1)
+    ).first()
+    latest_at = as_utc(latest.created_at) if latest is not None else None
+    if latest_at is None or now - latest_at >= CAPACITY_SNAPSHOT_INTERVAL:
+        db.add(
+            SystemHealthSnapshot(
+                database_size_bytes=database_size,
+                upload_size_bytes=upload_size,
+                upload_file_count=upload_count,
+            )
+        )
+        db.query(SystemHealthSnapshot).filter(
+            SystemHealthSnapshot.created_at < now - CAPACITY_SNAPSHOT_RETENTION
+        ).delete(synchronize_session=False)
+        try:
+            db.commit()
+        except Exception as exc:  # noqa: BLE001 - diagnostics must still render
+            db.rollback()
+            logger.warning("Could not store system-health capacity snapshot: %s", exc)
+
+    return {
+        "database_size_bytes": database_size,
+        "upload_size_bytes": upload_size,
+        "upload_file_count": upload_count,
+        "database_growth_bytes": database_growth,
+        "upload_growth_bytes": upload_growth,
+    }
+
+
 def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
     """Return failed documents and processing documents past the stale limit."""
     settings = get_settings()
@@ -210,6 +366,10 @@ async def sysadmin_diagnose(
     db: Session,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]], bool]:
     metrics = collect_metrics(db)
+    integrity_metrics, missing_files = collect_data_integrity(db)
+    capacity_metrics = collect_capacity(db)
+    metrics.update(integrity_metrics)
+    metrics.update(capacity_metrics)
     alerts = collect_document_alerts(db)
     active_alerts = [
         alert
@@ -238,6 +398,93 @@ async def sysadmin_diagnose(
                 "suggested_action": "Preview remediation, then mark the stale documents failed if the preview is correct.",
             }
         )
+    if metrics["orphaned_chunks"]:
+        findings.append(
+            {
+                "severity": "error",
+                "area": "data_integrity",
+                "message": (
+                    f"{metrics['orphaned_chunks']} text chunk(s) are orphaned from their "
+                    "document or course."
+                ),
+                "suggested_action": (
+                    "Back up the database, investigate the deletion path that left these "
+                    "chunks behind, then remove only the orphaned rows."
+                ),
+            }
+        )
+    if metrics["ready_documents_without_chunks"]:
+        findings.append(
+            {
+                "severity": "warning",
+                "area": "data_integrity",
+                "message": (
+                    f"{metrics['ready_documents_without_chunks']} ready document(s) have no "
+                    "text chunks."
+                ),
+                "suggested_action": (
+                    "Reprocess or re-upload the affected documents; a ready document with "
+                    "no chunks cannot support study material or citations."
+                ),
+            }
+        )
+    if metrics["missing_stored_files"]:
+        names = ", ".join(missing_files[:3])
+        if len(missing_files) > 3:
+            names += f", and {len(missing_files) - 3} more"
+        findings.append(
+            {
+                "severity": "warning",
+                "area": "data_integrity",
+                "message": (
+                    f"{metrics['missing_stored_files']} document(s) reference a stored file "
+                    f"that is missing: {names}."
+                ),
+                "suggested_action": (
+                    "Ask the affected students to re-upload these documents; retries need "
+                    "the original stored file."
+                ),
+            }
+        )
+
+    capacities = (
+        ("Database", metrics["database_size_bytes"], metrics["database_growth_bytes"]),
+        ("Upload storage", metrics["upload_size_bytes"], metrics["upload_growth_bytes"]),
+    )
+    settings = get_settings()
+    size_warning = max(1, int(settings.storage_warning_mb)) * 1024 * 1024
+    growth_warning = max(1, int(settings.storage_growth_warning_mb)) * 1024 * 1024
+    for name, size, growth in capacities:
+        if size is not None and size >= size_warning:
+            findings.append(
+                {
+                    "severity": "warning",
+                    "area": "capacity",
+                    "message": (
+                        f"{name} is using {_format_bytes(size)}, above the "
+                        f"{_format_bytes(size_warning)} warning threshold."
+                    ),
+                    "suggested_action": (
+                        "Increase storage or prune old data before the volume fills."
+                    ),
+                }
+            )
+        if growth is not None and growth >= growth_warning:
+            findings.append(
+                {
+                    "severity": "warning",
+                    "area": "capacity",
+                    "message": (
+                        f"{name} grew by {_format_bytes(growth)} over the "
+                        "seven-day capacity window."
+                    ),
+                    "suggested_action": (
+                        "Review recent database and upload growth, then prune or archive "
+                        "old data if the rate is unexpected."
+                    ),
+                }
+            )
+
     if not metrics["ai_enabled"]:
         findings.append(
             {

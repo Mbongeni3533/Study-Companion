@@ -33,6 +33,14 @@
     documents_processing: "Processing documents",
     topics_total: "Topics",
     chunks_total: "Text chunks",
+    orphaned_chunks: "Orphaned chunks",
+    ready_documents_without_chunks: "Ready docs without chunks",
+    missing_stored_files: "Missing stored files",
+    database_size_bytes: "Database size",
+    upload_size_bytes: "Upload storage",
+    upload_file_count: "Stored upload files",
+    database_growth_bytes: "Database growth (7d)",
+    upload_growth_bytes: "Upload growth (7d)",
     feedback_total: "Feedback",
     feedback_unresolved: "Unresolved feedback",
     invite_codes_total: "Invite codes",
@@ -47,8 +55,33 @@
     environment: "Environment",
   };
 
+  const HEALTH_BYTE_METRICS = new Set([
+    "database_size_bytes",
+    "upload_size_bytes",
+    "database_growth_bytes",
+    "upload_growth_bytes",
+  ]);
+  const HEALTH_GROWTH_METRICS = new Set(["database_growth_bytes", "upload_growth_bytes"]);
+
   function healthMetricLabel(key) {
     return HEALTH_METRIC_LABELS[key] || key.replace(/_/g, " ").replace(/^./, (char) => char.toUpperCase());
+  }
+
+  function formatBytes(value, signed = false) {
+    if (value == null || value === "") return signed ? "Baseline pending" : "—";
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes)) return "—";
+    const sign = bytes < 0 ? "−" : signed && bytes > 0 ? "+" : "";
+    let size = Math.abs(bytes);
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let unit = units[0];
+    for (const candidate of units) {
+      unit = candidate;
+      if (size < 1024 || candidate === "TB") break;
+      size /= 1024;
+    }
+    const digits = unit === "B" ? 0 : size >= 10 ? 1 : 2;
+    return `${sign}${size.toFixed(digits)} ${unit}`;
   }
 
   function healthMetricValue(key, value) {
@@ -57,8 +90,15 @@
       return value ? "Yes" : "No";
     }
     if (key === "database") return value === "postgres" ? "PostgreSQL" : "SQLite";
+    if (HEALTH_BYTE_METRICS.has(key)) return formatBytes(value, HEALTH_GROWTH_METRICS.has(key));
     if (typeof value === "number") return value.toLocaleString();
     return String(value ?? "—");
+  }
+
+  function healthAreaLabel(area) {
+    if (area === "data_integrity") return "Data integrity";
+    if (area === "capacity") return "Capacity";
+    return area || "system";
   }
 
   let lastDiagnosticsAt = null;
@@ -264,7 +304,7 @@
               <article class="health-finding health-finding--${severity}">
                 <span class="health-severity">${esc(severity)}</span>
                 <div class="health-finding-body">
-                  <strong>${esc(finding.area || "system")}</strong>
+                  <strong>${esc(healthAreaLabel(finding.area))}</strong>
                   <p>${esc(finding.message || "")}</p>
                   ${finding.suggested_action ? `<span class="health-action">Action: ${esc(finding.suggested_action)}</span>` : ""}
                 </div>

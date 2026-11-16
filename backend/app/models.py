@@ -127,6 +127,20 @@ class DocumentAlertState(TimestampMixin, Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class SystemHealthSnapshot(Base):
+    """Point-in-time storage sizes used to calculate capacity growth."""
+
+    __tablename__ = "system_health_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    database_size_bytes: Mapped[int | None] = mapped_column(Integer)
+    upload_size_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    upload_file_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
 class AdminNotificationState(Base):
     """Deduplication state for operational admin alerts.
 

@@ -84,6 +84,12 @@ class Settings(BaseSettings):
     # by the admin remediation agent. Existing failed documents are never changed.
     stale_processing_minutes: int = 60
 
+    # System-health capacity thresholds. Database and upload sizes are checked
+    # independently against the size warning; growth is measured over a rolling
+    # seven-day window.
+    storage_warning_mb: int = 1024
+    storage_growth_warning_mb: int = 100
+
     # --- Study defaults ---
     default_daily_study_minutes: int = 60
 
