@@ -18,6 +18,7 @@ from ..config import get_settings
 from ..models import (
     Chunk,
     Course,
+    DiagnosticSnapshot,
     Document,
     DocumentAlertState,
     Feedback,
@@ -151,6 +152,7 @@ def _alert_tracking(
 CAPACITY_WINDOW = timedelta(days=7)
 CAPACITY_SNAPSHOT_INTERVAL = timedelta(hours=1)
 CAPACITY_SNAPSHOT_RETENTION = timedelta(days=30)
+DIAGNOSTIC_HISTORY_RETENTION = timedelta(days=14)
 
 
 def _format_bytes(value: int | float | None) -> str:
@@ -362,6 +364,71 @@ def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
     )
 
 
+def diagnostic_summary(
+    findings: list[dict[str, Any]], alerts: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Reduce a diagnostics result to the status and counts shown in history."""
+    active_alerts = [
+        alert
+        for alert in alerts
+        if alert.get("tracking", {}).get("status") not in {"snoozed", "resolved"}
+    ]
+    failed = sum(1 for alert in active_alerts if alert.get("status") == "failed")
+    stale = sum(1 for alert in active_alerts if alert.get("stale"))
+    errors = sum(
+        1
+        for finding in findings
+        if finding.get("severity") == "error" and finding.get("area") != "documents"
+    )
+    warnings = sum(
+        1
+        for finding in findings
+        if finding.get("severity") == "warning" and finding.get("area") != "documents"
+    )
+    has_error = failed > 0 or any(
+        finding.get("severity") == "error" for finding in findings
+    )
+    has_warning = stale > 0 or any(
+        finding.get("severity") == "warning" for finding in findings
+    )
+    status = "critical" if has_error else "degraded" if has_warning else "healthy"
+    return {
+        "status": status,
+        "findings_count": len(findings),
+        "error_count": errors,
+        "warning_count": warnings,
+        "document_alerts": len(active_alerts),
+        "failed_documents": failed,
+        "stale_documents": stale,
+        "issue_count": failed + stale + errors + warnings,
+    }
+
+
+def record_diagnostic_snapshot(
+    db: Session, findings: list[dict[str, Any]], alerts: list[dict[str, Any]]
+) -> None:
+    """Keep a bounded, short history of diagnostics results for the banner."""
+    db.add(DiagnosticSnapshot(**diagnostic_summary(findings, alerts)))
+    db.query(DiagnosticSnapshot).filter(
+        DiagnosticSnapshot.generated_at < _now() - DIAGNOSTIC_HISTORY_RETENTION
+    ).delete(synchronize_session=False)
+    try:
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - diagnostics must still render
+        db.rollback()
+        logger.warning("Could not store diagnostics history snapshot: %s", exc)
+
+
+def recent_diagnostic_snapshots(db: Session, limit: int = 8) -> list[DiagnosticSnapshot]:
+    return list(
+        db.scalars(
+            select(DiagnosticSnapshot)
+            .order_by(DiagnosticSnapshot.generated_at.desc(), DiagnosticSnapshot.id.desc())
+            .limit(max(1, min(limit, 50)))
+        ).all()
+    )
+
+
 async def sysadmin_diagnose(
     db: Session,
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]], bool]:
@@ -528,6 +595,7 @@ async def sysadmin_diagnose(
                 "suggested_action": "Review the AI-generated plan before applying changes.",
             }
         )
+    record_diagnostic_snapshot(db, findings, alerts)
     return findings, metrics, alerts, ai_text is not None
 
 

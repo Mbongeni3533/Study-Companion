@@ -22,6 +22,8 @@ from ..schemas import (
     AIResearchResponse,
     ComplianceResponse,
     DiagnosticFinding,
+    DiagnosticHistoryPoint,
+    DiagnosticHistoryResponse,
     DiagnosticsResponse,
     DocumentAlert,
     DocumentAlertActionRequest,
@@ -45,6 +47,7 @@ from ..services.executive_agents import (
     collect_document_alerts,
     collect_metrics,
     legal_compliance,
+    recent_diagnostic_snapshots,
     recent_remediation_changes,
     sysadmin_diagnose,
     sysadmin_remediate,
@@ -246,6 +249,23 @@ async def sysadmin_diagnostics(
         metrics=metrics,
         alerts=[DocumentAlert(**alert) for alert in alerts],
         ai_used=ai_used,
+    )
+
+
+@router.get(
+    "/sysadmin/diagnostics/history", response_model=DiagnosticHistoryResponse
+)
+def sysadmin_diagnostics_history(
+    limit: int = Query(default=8, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin),
+) -> DiagnosticHistoryResponse:
+    """Return recent diagnostics results for the System health banner."""
+    return DiagnosticHistoryResponse(
+        history=[
+            DiagnosticHistoryPoint.model_validate(snapshot)
+            for snapshot in recent_diagnostic_snapshots(db, limit=limit)
+        ]
     )
 
 

@@ -131,6 +131,44 @@
 .health-banner--critical { border-color: rgba(251, 113, 133, 0.32); background: rgba(251, 113, 133, 0.07); }
 .health-banner--critical .health-banner-dot { background: #fb7185; box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.14); }
 .health-banner--critical strong { color: #fda4af; }
+.health-history {
+  margin: 8px 0 4px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(148, 163, 184, 0.035);
+}
+.health-history[hidden] { display: none; }
+.health-history-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.health-history-head strong { font-size: 12px; }
+.health-history-head span { color: var(--muted); font-size: 11.5px; }
+.health-history-list { display: flex; gap: 6px; overflow-x: auto; padding-top: 7px; scrollbar-width: thin; }
+.health-history-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.045);
+  color: var(--text-dim);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.health-history-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.health-history-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.health-history-item strong { font-size: 11.5px; font-weight: 650; }
+.health-history-count { color: var(--text-dim); }
+.health-history-item--healthy { border-color: rgba(52, 211, 153, 0.24); background: rgba(52, 211, 153, 0.045); }
+.health-history-item--healthy .health-history-dot { background: #34d399; }
+.health-history-item--healthy strong { color: #6ee7b7; }
+.health-history-item--degraded { border-color: rgba(251, 191, 36, 0.26); background: rgba(251, 191, 36, 0.045); }
+.health-history-item--degraded .health-history-dot { background: #fbbf24; }
+.health-history-item--degraded strong { color: #fbbf24; }
+.health-history-item--critical { border-color: rgba(251, 113, 133, 0.28); background: rgba(251, 113, 133, 0.05); }
+.health-history-item--critical .health-history-dot { background: #fb7185; }
+.health-history-item--critical strong { color: #fda4af; }
 .health-bulk-actions {
   display: flex;
   align-items: center;

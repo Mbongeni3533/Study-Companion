@@ -134,6 +134,65 @@
     node.title = lastDiagnosticsAt ? fmtDate(lastDiagnosticsAt) : "Diagnostics did not return a status";
   }
 
+  function historyTimestamp(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    const now = new Date();
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+
+  function renderDiagnosticHistory(history) {
+    const host = $("#health-history");
+    const list = $("#health-history-list");
+    if (!host || !list) return;
+    if (!history.length) {
+      host.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+    host.hidden = false;
+    $("#health-history-summary").textContent = `${history.length} most recent check${history.length === 1 ? "" : "s"}`;
+    list.innerHTML = history
+      .map((point) => {
+        const status = ["healthy", "degraded", "critical"].includes(point.status) ? point.status : "healthy";
+        const label = status === "critical" ? "Critical" : status === "degraded" ? "Degraded" : "Healthy";
+        const issues = Number(point.issue_count) || 0;
+        const findings = Number(point.findings_count) || 0;
+        const details = [`${issues} active issue${issues === 1 ? "" : "s"}`];
+        if (findings) details.push(`${findings} finding${findings === 1 ? "" : "s"}`);
+        if (point.failed_documents) details.push(`${point.failed_documents} failed`);
+        if (point.stale_documents) details.push(`${point.stale_documents} stale`);
+        return `<div class="health-history-item health-history-item--${status}" role="listitem" title="${esc(`${fmtDate(point.generated_at)} · ${details.join(" · ")}`)}">
+          <span class="health-history-dot" aria-hidden="true"></span>
+          <span class="health-history-time">${esc(historyTimestamp(point.generated_at))}</span>
+          <strong>${esc(label)}</strong>
+          <span class="health-history-count">${esc(`${issues} issue${issues === 1 ? "" : "s"}`)}</span>
+        </div>`;
+      })
+      .join("");
+  }
+
+  async function loadDiagnosticHistory() {
+    try {
+      const response = await fetch("/admin/agents/sysadmin/diagnostics/history?limit=8", {
+        credentials: "same-origin",
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      renderDiagnosticHistory(Array.isArray(data && data.history) ? data.history : []);
+    } catch (_error) {
+      const host = $("#health-history");
+      if (host) host.hidden = true;
+    }
+  }
+
   function paintHealthBanner(status, label, issues) {
     const banner = $("#health-banner");
     if (!banner) return;
@@ -331,6 +390,7 @@
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
       renderSystemHealth(data || {});
+      await loadDiagnosticHistory();
       const count = Array.isArray(data && data.findings) ? data.findings.length : 0;
       showHealthStatus(`Diagnostics complete: ${count} finding${count === 1 ? "" : "s"}.`);
     } catch (error) {
@@ -339,6 +399,7 @@
       $("#health-alerts").innerHTML = "";
       $("#health-bulk-actions").hidden = true;
       $("#health-findings").innerHTML = "";
+      $("#health-history").hidden = true;
       renderHealthBannerFailure();
       showHealthStatus(error.message || "Could not run diagnostics.", false);
     } finally {

@@ -141,6 +141,25 @@ class SystemHealthSnapshot(Base):
     )
 
 
+class DiagnosticSnapshot(Base):
+    """Point-in-time result summary for the admin diagnostics history."""
+
+    __tablename__ = "diagnostic_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    findings_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    warning_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    document_alerts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_documents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    stale_documents: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    issue_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
 class AdminNotificationState(Base):
     """Deduplication state for operational admin alerts.
 

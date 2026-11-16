@@ -533,6 +533,23 @@ class DiagnosticsResponse(BaseModel):
     ai_used: bool = False
 
 
+class DiagnosticHistoryPoint(ORMModel):
+    id: int
+    generated_at: datetime
+    status: Literal["healthy", "degraded", "critical"]
+    findings_count: int = 0
+    error_count: int = 0
+    warning_count: int = 0
+    document_alerts: int = 0
+    failed_documents: int = 0
+    stale_documents: int = 0
+    issue_count: int = 0
+
+
+class DiagnosticHistoryResponse(BaseModel):
+    history: list[DiagnosticHistoryPoint] = Field(default_factory=list)
+
+
 class RemediationAction(BaseModel):
     action: str
     affected: int = 0
