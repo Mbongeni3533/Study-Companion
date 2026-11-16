@@ -119,25 +119,84 @@ async def ceo_report(db: Session) -> tuple[str, dict[str, Any], bool]:
     return text, metrics, ai_used
 
 
-async def sysadmin_diagnose(db: Session) -> tuple[list[dict[str, Any]], dict[str, Any], bool]:
+def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
+    """Return failed documents and processing documents past the stale limit."""
+    settings = get_settings()
+    limit = max(1, int(settings.stale_processing_minutes))
+    now = _now()
+    documents = list(
+        db.scalars(
+            select(Document).where(Document.status.in_(["failed", "processing"]))
+        ).all()
+    )
+    alerts: list[dict[str, Any]] = []
+    for document in documents:
+        course = document.course
+        base = {
+            "document_id": document.id,
+            "filename": document.filename,
+            "course_id": course.id if course else document.course_id,
+            "course_title": course.title if course else None,
+        }
+        if document.status == "failed":
+            alerts.append(
+                {
+                    **base,
+                    "status": "failed",
+                    "age_minutes": None,
+                    "stale": False,
+                    "error": document.error_message or "No error message was recorded.",
+                    "action": "manual_review",
+                }
+            )
+            continue
+
+        last_activity = as_utc(document.updated_at or document.created_at)
+        if last_activity is None:
+            continue
+        age_minutes = max(0, int((now - last_activity).total_seconds() // 60))
+        if now - last_activity > timedelta(minutes=limit):
+            alerts.append(
+                {
+                    **base,
+                    "status": "processing",
+                    "age_minutes": age_minutes,
+                    "stale": True,
+                    "error": None,
+                    "action": "run_remediation",
+                }
+            )
+    return sorted(
+        alerts,
+        key=lambda alert: (0 if alert["status"] == "failed" else 1, alert["filename"].lower()),
+    )
+
+
+async def sysadmin_diagnose(
+    db: Session,
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]], bool]:
     metrics = collect_metrics(db)
+    alerts = collect_document_alerts(db)
+    failed_alerts = [alert for alert in alerts if alert["status"] == "failed"]
+    stale_alerts = [alert for alert in alerts if alert["stale"]]
     findings: list[dict[str, Any]] = []
-    if metrics["documents_failed"]:
+    if failed_alerts:
         findings.append(
             {
                 "severity": "error",
                 "area": "documents",
-                "message": f"{metrics['documents_failed']} document(s) failed processing.",
-                "suggested_action": "Inspect error_message and re-upload or retry processing.",
+                "message": f"{len(failed_alerts)} document(s) failed processing and need manual review.",
+                "suggested_action": "Review the document alerts and their error messages below.",
             }
         )
-    if metrics["documents_processing"]:
+    if stale_alerts:
+        limit = max(1, int(get_settings().stale_processing_minutes))
         findings.append(
             {
                 "severity": "warning",
                 "area": "documents",
-                "message": f"{metrics['documents_processing']} document(s) still processing.",
-                "suggested_action": "Check background tasks and OCR availability.",
+                "message": f"{len(stale_alerts)} document(s) have made no processing progress for more than {limit} minutes.",
+                "suggested_action": "Preview remediation, then mark the stale documents failed if the preview is correct.",
             }
         )
     if not metrics["ai_enabled"]:
@@ -169,9 +228,9 @@ async def sysadmin_diagnose(db: Session) -> tuple[list[dict[str, Any]], dict[str
         )
 
     prompt = (
-        "You are a system administrator for Study Companion. Review these diagnostics and metrics, "
-        "then give a short remediation plan. Do not invent data.\n\n"
-        f"Findings: {findings}\nMetrics: {metrics}"
+        "You are a system administrator for Study Companion. Review these diagnostics, metrics and "
+        "document alerts, then give a short remediation plan. Do not invent data.\n\n"
+        f"Findings: {findings}\nMetrics: {metrics}\nAlerts: {alerts}"
     )
     ai_text = await _llm("You are a careful SRE. Be concise and actionable.", prompt)
     if ai_text:
@@ -183,7 +242,7 @@ async def sysadmin_diagnose(db: Session) -> tuple[list[dict[str, Any]], dict[str
                 "suggested_action": "Review the AI-generated plan before applying changes.",
             }
         )
-    return findings, metrics, ai_text is not None
+    return findings, metrics, alerts, ai_text is not None
 
 
 def sysadmin_remediate(

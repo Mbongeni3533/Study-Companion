@@ -69,9 +69,52 @@
     node.classList.toggle("admin-status-error", Boolean(message) && !ok);
   }
 
+  function renderHealthAlerts(alerts) {
+    const host = $("#health-alerts");
+    if (!alerts.length) {
+      host.hidden = true;
+      host.innerHTML = "";
+      return;
+    }
+    const failed = alerts.filter((alert) => alert.status === "failed").length;
+    const stale = alerts.filter((alert) => alert.stale).length;
+    const summary = [failed ? `${failed} failed` : "", stale ? `${stale} stuck` : ""].filter(Boolean).join(" · ");
+    host.hidden = false;
+    host.innerHTML = `
+      <div class="health-alerts-head">
+        <strong>Attention required</strong>
+        <span>${esc(summary)}</span>
+      </div>
+      <div class="health-alert-list">${alerts
+        .map((alert) => {
+          const isStale = alert.stale || alert.action === "run_remediation";
+          const meta = [alert.course_title, alert.age_minutes != null ? `No progress for ${alert.age_minutes} min` : ""]
+            .filter(Boolean)
+            .join(" · ");
+          const detail = isStale
+            ? "This document has not progressed within the stale-processing limit. Preview the fix before applying it."
+            : alert.error || "This document failed processing and needs manual review.";
+          return `
+            <article class="health-alert ${isStale ? "health-alert--stale" : ""}">
+              <span class="health-alert-status">${isStale ? "Stuck" : "Failed"}</span>
+              <div class="health-alert-body">
+                <strong>${esc(alert.filename || "Untitled document")}</strong>
+                ${meta ? `<span class="health-alert-meta">${esc(meta)}</span>` : ""}
+                <p>${esc(detail)}</p>
+                ${isStale ? `<div class="health-alert-actions">
+                  <button class="btn btn-ghost btn-sm" type="button" data-health-action="preview">Preview fix</button>
+                  <button class="btn btn-ghost btn-sm admin-danger" type="button" data-health-action="apply">Mark stale failed</button>
+                </div>` : '<span class="health-alert-note">Manual review required</span>'}
+              </div>
+            </article>`;
+        })
+        .join("")}</div>`;
+  }
+
   function renderSystemHealth(data) {
     const metrics = data.metrics || {};
     $("#health-summary").textContent = `Generated ${fmtDate(data.generated_at)} · ${data.ai_used ? "AI-assisted plan" : "Rule-based plan"}`;
+    renderHealthAlerts(Array.isArray(data.alerts) ? data.alerts : []);
 
     const order = Object.keys(HEALTH_METRIC_LABELS);
     const entries = Object.entries(metrics).sort(([a], [b]) => {
@@ -131,6 +174,8 @@
       showHealthStatus(`Diagnostics complete: ${count} finding${count === 1 ? "" : "s"}.`);
     } catch (error) {
       $("#health-metrics").innerHTML = '<div class="admin-empty">System metrics could not be loaded.</div>';
+      $("#health-alerts").hidden = true;
+      $("#health-alerts").innerHTML = "";
       $("#health-findings").innerHTML = "";
       showHealthStatus(error.message || "Could not run diagnostics.", false);
     } finally {
@@ -186,6 +231,7 @@
       if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
       renderRemediation(data || {});
       const changed = Array.isArray(data && data.changes) ? data.changes.length : 0;
+      if (data && !data.dry_run && changed) await loadSystemHealth();
       showHealthStatus(
         data && data.dry_run
           ? "Dry run complete. No documents were changed."
@@ -642,6 +688,21 @@
   $("#admin-refresh").addEventListener("click", loadFeedback);
   $("#health-refresh").addEventListener("click", loadSystemHealth);
   $("#health-remediate").addEventListener("click", runRemediationScan);
+  $("#health-alerts").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-health-action]");
+    if (!button) return;
+    const action = button.dataset.healthAction;
+    if (action === "preview") {
+      $("#health-dry-run").checked = true;
+      runRemediationScan();
+      return;
+    }
+    if (action === "apply") {
+      if (!window.confirm("Mark every stale processing document failed? Failed documents will remain available for manual review.")) return;
+      $("#health-dry-run").checked = false;
+      runRemediationScan();
+    }
+  });
   $("#subscriber-refresh").addEventListener("click", loadSubscribers);
   $("#invite-refresh").addEventListener("click", loadInvites);
   $("#invite-form").addEventListener("submit", createInvite);

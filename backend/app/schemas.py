@@ -497,10 +497,23 @@ class DiagnosticFinding(BaseModel):
     suggested_action: str | None = None
 
 
+class DocumentAlert(BaseModel):
+    document_id: str
+    filename: str
+    course_id: str | None = None
+    course_title: str | None = None
+    status: Literal["failed", "processing"]
+    age_minutes: int | None = None
+    stale: bool = False
+    error: str | None = None
+    action: Literal["manual_review", "run_remediation"] = "manual_review"
+
+
 class DiagnosticsResponse(BaseModel):
     generated_at: datetime
     findings: list[DiagnosticFinding] = Field(default_factory=list)
     metrics: dict[str, Any] = Field(default_factory=dict)
+    alerts: list[DocumentAlert] = Field(default_factory=list)
     ai_used: bool = False
 
 

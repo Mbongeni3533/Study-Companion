@@ -17,6 +17,7 @@ from ..schemas import (
     AIResearchResponse,
     ComplianceResponse,
     DiagnosticsResponse,
+    DocumentAlert,
     ExecutiveReportResponse,
     RemediationAction,
     RemediationChange,
@@ -55,13 +56,14 @@ async def sysadmin_diagnostics(
     db: Session = Depends(get_db),
     _: None = Depends(_require_admin),
 ) -> DiagnosticsResponse:
-    findings, metrics, ai_used = await sysadmin_diagnose(db)
+    findings, metrics, alerts, ai_used = await sysadmin_diagnose(db)
     from ..schemas import DiagnosticFinding
 
     return DiagnosticsResponse(
         generated_at=datetime.now(timezone.utc),
         findings=[DiagnosticFinding(**f) for f in findings],
         metrics=metrics,
+        alerts=[DocumentAlert(**alert) for alert in alerts],
         ai_used=ai_used,
     )
 
