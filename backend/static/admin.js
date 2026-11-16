@@ -106,7 +106,10 @@
                 ${isStale ? `<div class="health-alert-actions">
                   <button class="btn btn-ghost btn-sm" type="button" data-health-action="preview" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Preview this fix</button>
                   <button class="btn btn-ghost btn-sm admin-danger" type="button" data-health-action="apply" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Mark this failed</button>
-                </div>` : '<span class="health-alert-note">Manual review required</span>'}
+                </div>` : `<div class="health-alert-actions">
+                  <button class="btn btn-ghost btn-sm" type="button" data-health-action="retry" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Retry processing</button>
+                  <span class="health-alert-note">Or leave for manual review</span>
+                </div>`}
               </div>
             </article>`;
         })
@@ -212,6 +215,35 @@
           )
           .join("")}</ul>
       </div>` : ""}`;
+  }
+
+  async function retryDocument({ documentId, documentName, button }) {
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Retrying...";
+    showHealthStatus(`Queueing a retry for ${documentName}…`);
+    try {
+      const response = await fetch(`/admin/agents/sysadmin/documents/${encodeURIComponent(documentId)}/retry`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (response.status === 404 || response.status === 409) {
+        await loadSystemHealth();
+      }
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      await loadSystemHealth();
+      showHealthStatus((data && data.message) || `Retry queued for ${documentName}.`);
+    } catch (error) {
+      showHealthStatus(error.message || "Could not retry this document.", false);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
   }
 
   async function runRemediationScan({ dryRun = true, documentId = null, button = null } = {}) {
@@ -711,6 +743,12 @@
     const action = button.dataset.healthAction;
     const documentId = button.dataset.documentId;
     if (!documentId) return;
+    if (action === "retry") {
+      const name = button.dataset.documentName || "this document";
+      if (!window.confirm(`Retry processing for "${name}"? The saved original file will be processed again and may take a few minutes.`)) return;
+      retryDocument({ documentId, documentName: name, button });
+      return;
+    }
     if (action === "preview") {
       runRemediationScan({ dryRun: true, documentId, button });
       return;

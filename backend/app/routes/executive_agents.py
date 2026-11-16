@@ -7,24 +7,27 @@ student-facing use.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
-from ..models import Document
+from ..models import Course, Document, RemediationEvent
 from ..schemas import (
     AIResearchResponse,
     ComplianceResponse,
     DiagnosticsResponse,
     DocumentAlert,
+    DocumentRetryResponse,
     ExecutiveReportResponse,
     RemediationAction,
     RemediationChange,
     RemediationResponse,
 )
 from .admin import _require_admin
+from .documents import _process_upload
 from ..services.executive_agents import (
     ai_research_briefing,
     ceo_report,
@@ -103,6 +106,70 @@ def sysadmin_remediate_endpoint(
         actions=[RemediationAction(**a) for a in actions],
         remaining_issues=remaining,
         changes=[RemediationChange.model_validate(change) for change in changes],
+    )
+
+
+@router.post(
+    "/sysadmin/documents/{document_id}/retry", response_model=DocumentRetryResponse
+)
+def retry_failed_document(
+    document_id: str,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin),
+) -> DocumentRetryResponse:
+    """Requeue one failed document from its saved original file."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if document.status != "failed":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only failed documents can be retried.",
+        )
+
+    source = Path(document.storage_path) if document.storage_path else None
+    if source is None or not source.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The original file is no longer available. Re-upload the document instead.",
+        )
+
+    course = db.get(Course, document.course_id)
+    if course is None:
+        raise HTTPException(status_code=404, detail="Course not found.")
+
+    previous_error = (document.error_message or "No error message was recorded.").strip()
+    document.status = "processing"
+    document.error_message = None
+    document.processed_at = None
+    document.progress_stage = "queued"
+    document.progress_current = 0
+    document.progress_total = 0
+    document.updated_at = datetime.now(timezone.utc)
+    db.add(
+        RemediationEvent(
+            action="retry_failed_document",
+            document_id=document.id,
+            document_filename=document.filename,
+            detail=f"Manual retry queued by admin; previous error: {previous_error[:500]}",
+        )
+    )
+    db.commit()
+
+    background.add_task(
+        _process_upload,
+        document.id,
+        course.id,
+        document.filename,
+        document.content_type,
+        source,
+    )
+    return DocumentRetryResponse(
+        generated_at=datetime.now(timezone.utc),
+        document_id=document.id,
+        filename=document.filename,
+        message=f"Retry queued for {document.filename}. Processing has restarted.",
     )
 
 

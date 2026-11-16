@@ -532,6 +532,14 @@ class RemediationChange(ORMModel):
     created_at: datetime
 
 
+class DocumentRetryResponse(BaseModel):
+    generated_at: datetime
+    document_id: str
+    filename: str
+    status: Literal["processing"] = "processing"
+    message: str
+
+
 class RemediationResponse(BaseModel):
     generated_at: datetime
     dry_run: bool = True
