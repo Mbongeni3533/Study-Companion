@@ -104,6 +104,33 @@
 .subscriber-activity li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px; color: var(--text-dim); font-size: 12.5px; }
 .subscriber-activity time { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
 .subscriber-event-action { color: var(--accent); font-weight: 650; }
+.health-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 12px 0 2px;
+  padding: 11px 13px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.05);
+}
+.health-banner[hidden] { display: none; }
+.health-banner-main { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; min-width: 0; }
+.health-banner-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.12); flex: none; }
+.health-banner strong { font-size: 13.5px; letter-spacing: 0.01em; }
+.health-banner-issues { color: var(--text-dim); font-size: 12.5px; }
+.health-banner-age { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.health-banner--healthy { border-color: rgba(52, 211, 153, 0.28); background: rgba(52, 211, 153, 0.06); }
+.health-banner--healthy .health-banner-dot { background: #34d399; box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.14); }
+.health-banner--healthy strong { color: #6ee7b7; }
+.health-banner--degraded { border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.06); }
+.health-banner--degraded .health-banner-dot { background: #fbbf24; box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.14); }
+.health-banner--degraded strong { color: #fbbf24; }
+.health-banner--critical { border-color: rgba(251, 113, 133, 0.32); background: rgba(251, 113, 133, 0.07); }
+.health-banner--critical .health-banner-dot { background: #fb7185; box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.14); }
+.health-banner--critical strong { color: #fda4af; }
 .health-bulk-actions {
   display: flex;
   align-items: center;

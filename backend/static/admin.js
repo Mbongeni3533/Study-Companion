@@ -61,12 +61,72 @@
     return String(value ?? "—");
   }
 
+  let lastDiagnosticsAt = null;
+
   function showHealthStatus(message, ok = true) {
     const node = $("#health-status");
     if (!node) return;
     node.textContent = message || "";
     node.classList.toggle("admin-status-ok", Boolean(message) && ok);
     node.classList.toggle("admin-status-error", Boolean(message) && !ok);
+  }
+
+  function relativeAge(value) {
+    if (!value) return "unknown";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "unknown";
+    const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    if (seconds < 60) return "just now";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+    const days = Math.floor(hours / 24);
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+  }
+
+  function updateHealthBannerAge() {
+    const node = $("#health-banner-age");
+    if (!node) return;
+    node.textContent = lastDiagnosticsAt ? `Last checked ${relativeAge(lastDiagnosticsAt)}` : "Last check failed";
+    node.title = lastDiagnosticsAt ? fmtDate(lastDiagnosticsAt) : "Diagnostics did not return a status";
+  }
+
+  function paintHealthBanner(status, label, issues) {
+    const banner = $("#health-banner");
+    if (!banner) return;
+    banner.hidden = false;
+    banner.classList.remove("health-banner--healthy", "health-banner--degraded", "health-banner--critical");
+    banner.classList.add(`health-banner--${status}`);
+    $("#health-banner-label").textContent = label;
+    $("#health-banner-issues").textContent = issues;
+  }
+
+  function renderHealthBanner(data) {
+    const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+    const findings = Array.isArray(data.findings) ? data.findings : [];
+    const failed = alerts.filter((alert) => alert.status === "failed").length;
+    const stale = alerts.filter((alert) => alert.stale).length;
+    const warnings = findings.filter((finding) => finding.severity === "warning" && finding.area !== "documents").length;
+    const errors = findings.filter((finding) => finding.severity === "error" && finding.area !== "documents").length;
+    const hasError = failed > 0 || findings.some((finding) => finding.severity === "error");
+    const hasWarning = stale > 0 || findings.some((finding) => finding.severity === "warning");
+    const status = hasError ? "critical" : hasWarning ? "degraded" : "healthy";
+    const label = status === "critical" ? "Critical" : status === "degraded" ? "Degraded" : "Healthy";
+    const parts = [];
+    if (failed) parts.push(`${failed} failed`);
+    if (stale) parts.push(`${stale} stale`);
+    if (warnings) parts.push(`${warnings} warning${warnings === 1 ? "" : "s"}`);
+    if (errors) parts.push(`${errors} error${errors === 1 ? "" : "s"}`);
+    paintHealthBanner(status, label, parts.length ? parts.join(" · ") : "0 active issues");
+    lastDiagnosticsAt = data.generated_at || null;
+    updateHealthBannerAge();
+  }
+
+  function renderHealthBannerFailure() {
+    paintHealthBanner("critical", "Critical", "Diagnostics unavailable");
+    lastDiagnosticsAt = null;
+    updateHealthBannerAge();
   }
 
   function renderHealthAlerts(alerts) {
@@ -120,6 +180,7 @@
   function renderSystemHealth(data) {
     const metrics = data.metrics || {};
     $("#health-summary").textContent = `Generated ${fmtDate(data.generated_at)} · ${data.ai_used ? "AI-assisted plan" : "Rule-based plan"}`;
+    renderHealthBanner(data);
     renderHealthAlerts(Array.isArray(data.alerts) ? data.alerts : []);
 
     const order = Object.keys(HEALTH_METRIC_LABELS);
@@ -184,6 +245,7 @@
       $("#health-alerts").innerHTML = "";
       $("#health-bulk-actions").hidden = true;
       $("#health-findings").innerHTML = "";
+      renderHealthBannerFailure();
       showHealthStatus(error.message || "Could not run diagnostics.", false);
     } finally {
       button.disabled = false;
@@ -760,6 +822,7 @@
   $("#admin-key-form").addEventListener("submit", signIn);
   $("#admin-refresh").addEventListener("click", loadFeedback);
   $("#health-refresh").addEventListener("click", loadSystemHealth);
+  setInterval(updateHealthBannerAge, 30000);
   $("#health-bulk-preview").addEventListener("click", (event) => {
     runRemediationScan({ dryRun: true, button: event.currentTarget });
   });

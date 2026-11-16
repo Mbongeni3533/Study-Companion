@@ -59,6 +59,14 @@
             <button class="btn btn-ghost btn-sm" type="button" id="health-refresh">Run diagnostics</button>
           </div>
         </div>
+        <div class="health-banner health-banner--healthy" id="health-banner" role="status" aria-live="polite" aria-atomic="true" hidden>
+          <div class="health-banner-main">
+            <span class="health-banner-dot" aria-hidden="true"></span>
+            <strong id="health-banner-label">Healthy</strong>
+            <span class="health-banner-issues" id="health-banner-issues">No active issues</span>
+          </div>
+          <span class="health-banner-age" id="health-banner-age">Last checked —</span>
+        </div>
         <p class="small muted" id="health-status" role="status" aria-live="polite" aria-atomic="true"></p>
         <div class="health-alerts" id="health-alerts" hidden></div>
         <div class="health-bulk-actions" id="health-bulk-actions" hidden>
