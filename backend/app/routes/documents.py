@@ -228,7 +228,7 @@ def _process_upload(
     try:
         document = db.get(Document, document_id)
         course = db.get(Course, course_id)
-        if document is None or course is None:
+        if document is None or course is None or document.status != "processing":
             return
 
         def progress(stage: str, current: int, total: int) -> None:
@@ -245,7 +245,7 @@ def _process_upload(
         except Exception as exc:  # noqa: BLE001 - surface any failure on the document
             db.rollback()
             document = db.get(Document, document_id)
-            if document is None:
+            if document is None or document.status != "processing":
                 return
             document.status = "failed"
             document.error_message = (
@@ -258,6 +258,9 @@ def _process_upload(
             return
 
         progress("indexing", 0, 0)
+        db.refresh(document)
+        if document.status != "processing":
+            return
         _write_document(
             db,
             course,

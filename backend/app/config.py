@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     ocr_max_pages: int = 25
     ocr_dpi: int = 150
 
+    # A document with no processing progress for this long may be marked failed
+    # by the admin remediation agent. Existing failed documents are never changed.
+    stale_processing_minutes: int = 60
+
     # --- Study defaults ---
     default_daily_study_minutes: int = 60
 

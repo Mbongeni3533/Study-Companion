@@ -39,6 +39,7 @@
     invite_codes_active: "Active invites",
     invite_codes_exhausted: "Exhausted invites",
     study_minutes_total: "Study minutes",
+    stale_processing_minutes: "Stale processing limit (min)",
     ai_enabled: "AI provider",
     beta_invite_only: "Invite-only beta",
     allow_anonymous_sessions: "Guest sessions",
@@ -142,28 +143,38 @@
     const host = $("#health-remediation");
     const actions = Array.isArray(data.actions) ? data.actions : [];
     const remaining = Array.isArray(data.remaining_issues) ? data.remaining_issues : [];
+    const changes = Array.isArray(data.changes) ? data.changes : [];
     host.hidden = false;
     host.innerHTML = `
       <div class="health-remediation-head">
         <h3>Remediation scan</h3>
-        <span>${esc(fmtDate(data.generated_at))}</span>
+        <span>${data.dry_run ? "Dry run" : "Changes applied"} · ${esc(fmtDate(data.generated_at))}</span>
       </div>
       ${actions.length ? `<ul>${actions
         .map(
           (action) => `<li><strong>${esc(action.action || "check")}</strong><span>${esc(action.affected ?? 0)} affected</span>${action.detail ? `<span>${esc(action.detail)}</span>` : ""}</li>`
         )
         .join("")}</ul>` : '<div class="admin-empty">No checks were returned.</div>'}
-      ${remaining.length ? `<p class="health-remaining">Needs manual review: ${remaining.map((item) => esc(item)).join(" ")}</p>` : ""}`;
+      ${remaining.length ? `<p class="health-remaining">Needs manual review: ${remaining.map((item) => esc(item)).join(" ")}</p>` : ""}
+      ${changes.length ? `<div class="health-changes">
+        <h4>Recorded changes</h4>
+        <ul>${changes
+          .map(
+            (change) => `<li><strong>${esc(change.document_filename || change.document_id || "document")}</strong><span>${esc(change.detail || change.action)}</span><time>${esc(fmtDate(change.created_at))}</time></li>`
+          )
+          .join("")}</ul>
+      </div>` : ""}`;
   }
 
   async function runRemediationScan() {
     const button = $("#health-remediate");
+    const dryRun = $("#health-dry-run").checked;
     const original = button.textContent;
     button.disabled = true;
-    button.textContent = "Running scan...";
-    showHealthStatus("Running remediation scan…");
+    button.textContent = dryRun ? "Checking..." : "Applying...";
+    showHealthStatus(dryRun ? "Running remediation dry run…" : "Applying stale-document remediation…");
     try {
-      const response = await fetch("/admin/agents/sysadmin/remediate", {
+      const response = await fetch(`/admin/agents/sysadmin/remediate?dry_run=${dryRun ? "true" : "false"}`, {
         method: "POST",
         credentials: "same-origin",
       });
@@ -174,7 +185,12 @@
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
       renderRemediation(data || {});
-      showHealthStatus("Remediation scan complete. No automatic changes were made.");
+      const changed = Array.isArray(data && data.changes) ? data.changes.length : 0;
+      showHealthStatus(
+        data && data.dry_run
+          ? "Dry run complete. No documents were changed."
+          : `Remediation complete. ${changed} document${changed === 1 ? "" : "s"} marked failed.`
+      );
     } catch (error) {
       showHealthStatus(error.message || "Could not run the remediation scan.", false);
     } finally {

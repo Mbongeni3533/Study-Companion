@@ -94,6 +94,21 @@ class User(TimestampMixin, Base):
         return f"/auth/avatar/{self.id}?v={self.avatar_key or 'current'}"
 
 
+class RemediationEvent(Base):
+    """Audit record for a document status change made by the sysadmin agent."""
+
+    __tablename__ = "remediation_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    document_id: Mapped[str | None] = mapped_column(String(48), index=True)
+    document_filename: Mapped[str | None] = mapped_column(String(255))
+    detail: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True
+    )
+
+
 class BillingEvent(Base):
     """Idempotency record for Stripe webhook events."""
 

@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from ..config import get_settings
 from ..database import get_db
 from ..schemas import (
     AIResearchResponse,
@@ -18,6 +19,7 @@ from ..schemas import (
     DiagnosticsResponse,
     ExecutiveReportResponse,
     RemediationAction,
+    RemediationChange,
     RemediationResponse,
 )
 from .admin import _require_admin
@@ -26,6 +28,7 @@ from ..services.executive_agents import (
     ceo_report,
     collect_metrics,
     legal_compliance,
+    recent_remediation_changes,
     sysadmin_diagnose,
     sysadmin_remediate,
 )
@@ -65,15 +68,34 @@ async def sysadmin_diagnostics(
 
 @router.post("/sysadmin/remediate", response_model=RemediationResponse)
 def sysadmin_remediate_endpoint(
+    dry_run: bool = Query(
+        default=True,
+        description="Preview stale-document changes without applying them.",
+    ),
     db: Session = Depends(get_db),
     _: None = Depends(_require_admin),
 ) -> RemediationResponse:
-    actions, remaining = sysadmin_remediate(db)
+    actions, remaining, changes = sysadmin_remediate(db, dry_run=dry_run)
     return RemediationResponse(
         generated_at=datetime.now(timezone.utc),
+        dry_run=dry_run,
+        stale_after_minutes=get_settings().stale_processing_minutes,
         actions=[RemediationAction(**a) for a in actions],
         remaining_issues=remaining,
+        changes=[RemediationChange.model_validate(change) for change in changes],
     )
+
+
+@router.get("/sysadmin/remediation-log", response_model=list[RemediationChange])
+def sysadmin_remediation_log(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: None = Depends(_require_admin),
+) -> list[RemediationChange]:
+    return [
+        RemediationChange.model_validate(change)
+        for change in recent_remediation_changes(db, limit=limit)
+    ]
 
 
 @router.get("/legal/compliance", response_model=ComplianceResponse)

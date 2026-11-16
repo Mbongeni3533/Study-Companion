@@ -7,7 +7,7 @@ kept behind the admin key and are never exposed to students.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -20,9 +20,11 @@ from ..models import (
     Document,
     Feedback,
     InviteCode,
+    RemediationEvent,
     StudyLog,
     Topic,
     User,
+    as_utc,
 )
 from .ai_provider import LLMMessage, build_provider
 
@@ -59,6 +61,7 @@ def collect_metrics(db: Session) -> dict[str, Any]:
         "invite_codes_active": sum(1 for c in invite_codes if not c.revoked and c.uses < c.max_uses),
         "invite_codes_exhausted": sum(1 for c in invite_codes if c.uses >= c.max_uses),
         "study_minutes_total": study_minutes,
+        "stale_processing_minutes": settings.stale_processing_minutes,
         "ai_enabled": settings.ai_enabled,
         "beta_invite_only": settings.beta_invite_only,
         "allow_anonymous_sessions": settings.allow_anonymous_sessions,
@@ -183,23 +186,98 @@ async def sysadmin_diagnose(db: Session) -> tuple[list[dict[str, Any]], dict[str
     return findings, metrics, ai_text is not None
 
 
-def sysadmin_remediate(db: Session) -> tuple[list[dict[str, Any]], list[str]]:
+def sysadmin_remediate(
+    db: Session, *, dry_run: bool = True
+) -> tuple[list[dict[str, Any]], list[str], list[RemediationEvent]]:
+    """Mark stale processing documents failed, or preview that action.
+
+    A document is stale when it is still ``processing`` and has had no progress
+    for the configured limit. Failed documents are deliberately left alone for
+    manual review. Every applied status change gets an audit record.
+    """
+    settings = get_settings()
+    limit = max(1, int(settings.stale_processing_minutes))
+    cutoff = _now() - timedelta(minutes=limit)
     actions: list[dict[str, Any]] = []
     remaining: list[str] = []
+    changes: list[RemediationEvent] = []
 
-    stuck = db.scalars(
-        select(Document).where(Document.status == "processing")
-    ).all()
-    # Mark very old processing docs as failed is handled by caller policy; here we
-    # only report them to avoid destructive changes.
-    if stuck:
-        remaining.append(f"{len(stuck)} document(s) still processing; not auto-failed.")
+    processing = list(db.scalars(select(Document).where(Document.status == "processing")).all())
+    prior_failed = list(db.scalars(select(Document).where(Document.status == "failed")).all())
+    stale: list[tuple[Document, int]] = []
+    active = 0
+    for document in processing:
+        last_activity = as_utc(document.updated_at or document.created_at)
+        if last_activity is None or last_activity > cutoff:
+            active += 1
+            continue
+        age_minutes = max(0, int((_now() - last_activity).total_seconds() // 60))
+        stale.append((document, age_minutes))
+
+    if stale:
+        names = ", ".join(document.filename for document, _ in stale[:5])
+        if len(stale) > 5:
+            names += f", and {len(stale) - 5} more"
+        if dry_run:
+            actions.append(
+                {
+                    "action": "would_mark_stale_failed",
+                    "affected": len(stale),
+                    "detail": (
+                        f"Would mark {len(stale)} processing document(s) failed after more than "
+                        f"{limit} minutes without progress: {names}. No changes were made."
+                    ),
+                }
+            )
+        else:
+            for document, age_minutes in stale:
+                previous_progress = document.progress_stage or "no stage recorded"
+                document.status = "failed"
+                document.error_message = (
+                    f"Processing timed out after {age_minutes} minutes without progress. "
+                    "Marked failed for manual review."
+                )
+                document.progress_stage = None
+                document.progress_current = 0
+                document.progress_total = 0
+                change = RemediationEvent(
+                    action="mark_stale_failed",
+                    document_id=document.id,
+                    document_filename=document.filename,
+                    detail=(
+                        f"Processing had been idle for {age_minutes} minutes "
+                        f"(limit {limit}); previous stage: {previous_progress}."
+                    ),
+                )
+                db.add(change)
+                changes.append(change)
+            actions.append(
+                {
+                    "action": "mark_stale_failed",
+                    "affected": len(stale),
+                    "detail": (
+                        f"Marked {len(stale)} stale processing document(s) failed after more than "
+                        f"{limit} minutes without progress: {names}."
+                    ),
+                }
+            )
     else:
-        actions.append({"action": "document_processing_check", "affected": 0, "detail": "No stuck documents found."})
+        actions.append(
+            {
+                "action": "document_processing_check",
+                "affected": 0,
+                "detail": f"No processing documents older than {limit} minutes.",
+            }
+        )
 
-    failed = db.scalars(select(Document).where(Document.status == "failed")).all()
-    if failed:
-        remaining.append(f"{len(failed)} failed document(s) need manual review.")
+    if active:
+        remaining.append(
+            f"{active} processing document(s) are still within the {limit}-minute progress limit."
+        )
+
+    failed_count = len(prior_failed) + (0 if dry_run else len(stale))
+    if failed_count:
+        remaining.append(f"{failed_count} failed document(s) are left for manual review.")
     else:
         actions.append({"action": "failed_document_check", "affected": 0, "detail": "No failed documents."})
 
@@ -211,8 +289,19 @@ def sysadmin_remediate(db: Session) -> tuple[list[dict[str, Any]], list[str]]:
             "detail": "Scan completed; no automatic deletions performed for safety.",
         }
     )
-    db.commit()
-    return actions, remaining
+    if changes:
+        db.commit()
+    return actions, remaining, changes
+
+
+def recent_remediation_changes(db: Session, limit: int = 50) -> list[RemediationEvent]:
+    return list(
+        db.scalars(
+            select(RemediationEvent)
+            .order_by(RemediationEvent.created_at.desc(), RemediationEvent.id.desc())
+            .limit(max(1, min(limit, 200)))
+        ).all()
+    )
 
 
 async def legal_compliance(db: Session, jurisdiction: str) -> tuple[str, list[str], bool]:

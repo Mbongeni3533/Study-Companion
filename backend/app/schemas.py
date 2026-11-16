@@ -510,10 +510,22 @@ class RemediationAction(BaseModel):
     detail: str | None = None
 
 
+class RemediationChange(ORMModel):
+    id: int
+    action: str
+    document_id: str | None = None
+    document_filename: str | None = None
+    detail: str | None = None
+    created_at: datetime
+
+
 class RemediationResponse(BaseModel):
     generated_at: datetime
+    dry_run: bool = True
+    stale_after_minutes: int = 60
     actions: list[RemediationAction] = Field(default_factory=list)
     remaining_issues: list[str] = Field(default_factory=list)
+    changes: list[RemediationChange] = Field(default_factory=list)
 
 
 class ComplianceResponse(BaseModel):
