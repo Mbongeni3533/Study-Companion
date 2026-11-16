@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_db
+from ..models import Document
 from ..schemas import (
     AIResearchResponse,
     ComplianceResponse,
@@ -74,13 +75,30 @@ def sysadmin_remediate_endpoint(
         default=True,
         description="Preview stale-document changes without applying them.",
     ),
+    document_id: str | None = Query(
+        default=None,
+        max_length=48,
+        description="Scope remediation to one document; omit for the bulk path.",
+    ),
     db: Session = Depends(get_db),
     _: None = Depends(_require_admin),
 ) -> RemediationResponse:
-    actions, remaining, changes = sysadmin_remediate(db, dry_run=dry_run)
+    if document_id:
+        document = db.get(Document, document_id)
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        if document.status != "processing":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="That document is no longer processing.",
+            )
+    actions, remaining, changes = sysadmin_remediate(
+        db, dry_run=dry_run, document_id=document_id
+    )
     return RemediationResponse(
         generated_at=datetime.now(timezone.utc),
         dry_run=dry_run,
+        document_id=document_id,
         stale_after_minutes=get_settings().stale_processing_minutes,
         actions=[RemediationAction(**a) for a in actions],
         remaining_issues=remaining,

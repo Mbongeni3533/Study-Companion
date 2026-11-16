@@ -535,6 +535,7 @@ class RemediationChange(ORMModel):
 class RemediationResponse(BaseModel):
     generated_at: datetime
     dry_run: bool = True
+    document_id: str | None = None
     stale_after_minutes: int = 60
     actions: list[RemediationAction] = Field(default_factory=list)
     remaining_issues: list[str] = Field(default_factory=list)

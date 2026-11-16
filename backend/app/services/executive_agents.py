@@ -246,13 +246,15 @@ async def sysadmin_diagnose(
 
 
 def sysadmin_remediate(
-    db: Session, *, dry_run: bool = True
+    db: Session, *, dry_run: bool = True, document_id: str | None = None
 ) -> tuple[list[dict[str, Any]], list[str], list[RemediationEvent]]:
     """Mark stale processing documents failed, or preview that action.
 
     A document is stale when it is still ``processing`` and has had no progress
-    for the configured limit. Failed documents are deliberately left alone for
-    manual review. Every applied status change gets an audit record.
+    for the configured limit. Pass ``document_id`` to scope the action to one
+    document; omit it for the explicit bulk path. Failed documents are
+    deliberately left alone for manual review. Every applied status change gets
+    an audit record.
     """
     settings = get_settings()
     limit = max(1, int(settings.stale_processing_minutes))
@@ -261,7 +263,10 @@ def sysadmin_remediate(
     remaining: list[str] = []
     changes: list[RemediationEvent] = []
 
-    processing = list(db.scalars(select(Document).where(Document.status == "processing")).all())
+    processing_query = select(Document).where(Document.status == "processing")
+    if document_id:
+        processing_query = processing_query.where(Document.id == document_id)
+    processing = list(db.scalars(processing_query).all())
     prior_failed = list(db.scalars(select(Document).where(Document.status == "failed")).all())
     stale: list[tuple[Document, int]] = []
     active = 0

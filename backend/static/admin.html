@@ -57,15 +57,20 @@
           </div>
           <div class="card-head-actions">
             <button class="btn btn-ghost btn-sm" type="button" id="health-refresh">Run diagnostics</button>
-            <label class="health-dry-run">
-              <input id="health-dry-run" type="checkbox" checked />
-              Dry run
-            </label>
-            <button class="btn btn-primary btn-sm" type="button" id="health-remediate">Run remediation scan</button>
           </div>
         </div>
         <p class="small muted" id="health-status" role="status" aria-live="polite" aria-atomic="true"></p>
         <div class="health-alerts" id="health-alerts" hidden></div>
+        <div class="health-bulk-actions" id="health-bulk-actions" hidden>
+          <div>
+            <strong>Bulk remediation</strong>
+            <span>Acts on every stale processing document, not just one alert.</span>
+          </div>
+          <div class="health-bulk-buttons">
+            <button class="btn btn-ghost btn-sm" type="button" id="health-bulk-preview">Preview all stale</button>
+            <button class="btn btn-ghost btn-sm admin-danger" type="button" id="health-bulk-apply">Mark all stale failed</button>
+          </div>
+        </div>
         <div class="health-metrics" id="health-metrics">
           <div class="admin-empty">Enter the admin key to see system metrics.</div>
         </div>
