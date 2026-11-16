@@ -531,16 +531,26 @@ async def sysadmin_diagnose(
     return findings, metrics, alerts, ai_text is not None
 
 
+def _stale_failure_message(age_minutes: int) -> str:
+    return (
+        f"Processing timed out after {age_minutes} minutes without progress. "
+        "Marked failed for manual review."
+    )
+
+
 def sysadmin_remediate(
-    db: Session, *, dry_run: bool = True, document_id: str | None = None
-) -> tuple[list[dict[str, Any]], list[str], list[RemediationEvent]]:
-    """Mark stale processing documents failed, or preview that action.
+    db: Session,
+    *,
+    dry_run: bool = True,
+    document_id: str | None = None,
+    document_ids: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[str], list[RemediationEvent], list[dict[str, Any]]]:
+    """Preview or apply failure status changes for stale documents.
 
     A document is stale when it is still ``processing`` and has had no progress
-    for the configured limit. Pass ``document_id`` to scope the action to one
-    document; omit it for the explicit bulk path. Failed documents are
-    deliberately left alone for manual review. Every applied status change gets
-    an audit record.
+    for the configured limit. Pass ``document_id`` to scope one document, or
+    ``document_ids`` to apply only a selected subset. Every applied status change
+    gets an audit record; failed documents otherwise stay for manual review.
     """
     settings = get_settings()
     limit = max(1, int(settings.stale_processing_minutes))
@@ -549,10 +559,15 @@ def sysadmin_remediate(
     actions: list[dict[str, Any]] = []
     remaining: list[str] = []
     changes: list[RemediationEvent] = []
+    requested_ids = list(
+        dict.fromkeys(item.strip() for item in (document_ids or []) if item.strip())
+    )
 
     processing_query = select(Document).where(Document.status == "processing")
     if document_id:
         processing_query = processing_query.where(Document.id == document_id)
+    elif document_ids is not None:
+        processing_query = processing_query.where(Document.id.in_(requested_ids))
     processing = list(db.scalars(processing_query).all())
     prior_failed = list(db.scalars(select(Document).where(Document.status == "failed")).all())
     alert_states = {
@@ -579,6 +594,40 @@ def sysadmin_remediate(
         age_minutes = max(0, int((now - last_activity).total_seconds() // 60))
         stale.append((document, age_minutes))
 
+    candidates = [
+        {
+            "document_id": document.id,
+            "filename": document.filename,
+            "course_id": document.course_id,
+            "course_title": document.course.title if document.course else None,
+            "status": "processing",
+            "next_status": "failed",
+            "idle_minutes": age_minutes,
+            "previous_stage": document.progress_stage,
+            "next_stage": None,
+            "progress_current": document.progress_current,
+            "progress_total": document.progress_total,
+            "next_progress_current": 0,
+            "next_progress_total": 0,
+            "next_error_message": _stale_failure_message(age_minutes),
+        }
+        for document, age_minutes in stale
+    ]
+
+    if document_ids is not None:
+        skipped = set(requested_ids) - {document.id for document, _ in stale}
+        if skipped:
+            actions.append(
+                {
+                    "action": "selection_skipped",
+                    "affected": len(skipped),
+                    "detail": (
+                        f"Skipped {len(skipped)} selected document(s) that are no "
+                        "longer stale processing documents."
+                    ),
+                }
+            )
+
     if stale:
         names = ", ".join(document.filename for document, _ in stale[:5])
         if len(stale) > 5:
@@ -598,10 +647,7 @@ def sysadmin_remediate(
             for document, age_minutes in stale:
                 previous_progress = document.progress_stage or "no stage recorded"
                 document.status = "failed"
-                document.error_message = (
-                    f"Processing timed out after {age_minutes} minutes without progress. "
-                    "Marked failed for manual review."
-                )
+                document.error_message = _stale_failure_message(age_minutes)
                 document.progress_stage = None
                 document.progress_current = 0
                 document.progress_total = 0
@@ -668,7 +714,7 @@ def sysadmin_remediate(
     )
     if changes:
         db.commit()
-    return actions, remaining, changes
+    return actions, remaining, changes, candidates
 
 
 def recent_remediation_changes(db: Session, limit: int = 50) -> list[RemediationEvent]:

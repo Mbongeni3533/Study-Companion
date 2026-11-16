@@ -347,22 +347,66 @@
     }
   }
 
+  function updateRemediationSelection() {
+    const host = $("#health-remediation");
+    if (!host) return;
+    const boxes = [...host.querySelectorAll("[data-remediation-select]")];
+    const selected = boxes.filter((box) => box.checked).length;
+    const label = host.querySelector("[data-remediation-selected]");
+    if (label) label.textContent = `${selected} of ${boxes.length} selected`;
+    const button = host.querySelector("[data-remediation-apply]");
+    if (button) button.disabled = selected === 0;
+  }
+
   function renderRemediation(data) {
     const host = $("#health-remediation");
     const actions = Array.isArray(data.actions) ? data.actions : [];
+    const candidates = Array.isArray(data.candidates) ? data.candidates : [];
     const remaining = Array.isArray(data.remaining_issues) ? data.remaining_issues : [];
     const changes = Array.isArray(data.changes) ? data.changes : [];
     host.hidden = false;
     host.innerHTML = `
       <div class="health-remediation-head">
         <h3>Remediation scan</h3>
-        <span>${data.document_id ? "Single document" : "All stale documents"} · ${data.dry_run ? "Dry run" : "Changes applied"} · ${esc(fmtDate(data.generated_at))}</span>
+        <span>${data.document_id ? "Single document" : data.dry_run ? "Bulk preview" : "Bulk remediation"} · ${data.dry_run ? "Dry run" : "Changes applied"} · ${esc(fmtDate(data.generated_at))}</span>
       </div>
       ${actions.length ? `<ul>${actions
         .map(
           (action) => `<li><strong>${esc(action.action || "check")}</strong><span>${esc(action.affected ?? 0)} affected</span>${action.detail ? `<span>${esc(action.detail)}</span>` : ""}</li>`
         )
         .join("")}</ul>` : '<div class="admin-empty">No checks were returned.</div>'}
+      ${data.dry_run && candidates.length ? `<div class="health-remediation-candidates">
+        <div class="health-candidate-head">
+          <h4>Stale documents</h4>
+          <span>Each selected document moves from processing to failed. Deselect any document you want to leave running.</span>
+        </div>
+        <ul class="health-candidate-list">
+          ${candidates.map((candidate) => `
+            <li class="health-candidate">
+              <label class="health-candidate-check">
+                <input type="checkbox" data-remediation-select value="${esc(candidate.document_id)}" checked />
+                <span class="sr-only">Select ${esc(candidate.filename)}</span>
+              </label>
+              <div class="health-candidate-body">
+                <div class="health-candidate-title">
+                  <strong>${esc(candidate.filename)}</strong>
+                  <span>${esc(candidate.course_title || "Unknown course")}</span>
+                </div>
+                <div class="health-candidate-grid">
+                  <span><em>Idle</em> ${esc(candidate.idle_minutes)} min</span>
+                  <span><em>Stage</em> ${esc(candidate.previous_stage || "no stage recorded")} → none</span>
+                  <span><em>Status</em> ${esc(candidate.status)} → ${esc(candidate.next_status)}</span>
+                  <span><em>Progress</em> ${esc(candidate.progress_current)}/${esc(candidate.progress_total)} → 0/0</span>
+                </div>
+                <span class="health-candidate-error">${esc(candidate.next_error_message)}</span>
+              </div>
+            </li>`).join("")}
+        </ul>
+        <div class="health-remediation-applybar">
+          <span data-remediation-selected>${candidates.length} of ${candidates.length} selected</span>
+          <button class="btn btn-ghost btn-sm admin-danger" type="button" data-remediation-apply>Apply selected</button>
+        </div>
+      </div>` : ""}
       ${remaining.length ? `<p class="health-remaining">Needs manual review: ${remaining.map((item) => esc(item)).join(" ")}</p>` : ""}
       ${changes.length ? `<div class="health-changes">
         <h4>Recorded changes</h4>
@@ -372,6 +416,7 @@
           )
           .join("")}</ul>
       </div>` : ""}`;
+    updateRemediationSelection();
   }
 
   async function updateDocumentAlert({ documentId, action = null, note = null, snoozeMinutes = null, button, successMessage }) {
@@ -467,23 +512,26 @@
     }
   }
 
-  async function runRemediationScan({ dryRun = true, documentId = null, button = null } = {}) {
+  async function runRemediationScan({ dryRun = true, documentId = null, documentIds = null, button = null } = {}) {
     const actionButton = button || $("#health-bulk-preview");
     const original = actionButton.textContent;
     const params = new URLSearchParams({ dry_run: dryRun ? "true" : "false" });
     if (documentId) params.set("document_id", documentId);
+    const scope = documentId
+      ? "this document"
+      : documentIds && documentIds.length
+        ? `${documentIds.length} selected document${documentIds.length === 1 ? "" : "s"}`
+        : "all stale documents";
     actionButton.disabled = true;
     actionButton.textContent = dryRun ? "Checking..." : "Applying...";
-    showHealthStatus(
-      dryRun
-        ? `Running remediation dry run${documentId ? " for this document" : " for all stale documents"}…`
-        : `Applying remediation${documentId ? " to this document" : " to all stale documents"}…`
-    );
+    showHealthStatus(dryRun ? `Running remediation dry run for ${scope}…` : `Applying remediation to ${scope}…`);
     try {
-      const response = await fetch(`/admin/agents/sysadmin/remediate?${params.toString()}`, {
-        method: "POST",
-        credentials: "same-origin",
-      });
+      const options = { method: "POST", credentials: "same-origin" };
+      if (documentIds && documentIds.length) {
+        options.headers = { "Content-Type": "application/json" };
+        options.body = JSON.stringify({ document_ids: documentIds });
+      }
+      const response = await fetch(`/admin/agents/sysadmin/remediate?${params.toString()}`, options);
       if (response.status === 403) {
         showLogin("Admin session expired. Enter the admin key again.");
         return;
@@ -955,9 +1003,18 @@
   $("#health-bulk-preview").addEventListener("click", (event) => {
     runRemediationScan({ dryRun: true, button: event.currentTarget });
   });
-  $("#health-bulk-apply").addEventListener("click", (event) => {
-    if (!window.confirm("Mark ALL stale processing documents failed? This affects every stale document, not only one alert. Failed documents will remain available for manual review.")) return;
-    runRemediationScan({ dryRun: false, button: event.currentTarget });
+  $("#health-remediation").addEventListener("change", (event) => {
+    if (event.target.matches("[data-remediation-select]")) updateRemediationSelection();
+  });
+  $("#health-remediation").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remediation-apply]");
+    if (!button) return;
+    const documentIds = [...$("#health-remediation").querySelectorAll("[data-remediation-select]:checked")].map(
+      (checkbox) => checkbox.value
+    );
+    if (!documentIds.length) return;
+    if (!window.confirm(`Mark ${documentIds.length} selected document${documentIds.length === 1 ? "" : "s"} failed? Only the selected documents will change.`)) return;
+    runRemediationScan({ dryRun: false, documentIds, button });
   });
   $("#health-alerts").addEventListener("click", (event) => {
     const toggle = event.target.closest("[data-health-toggle-tracked]");

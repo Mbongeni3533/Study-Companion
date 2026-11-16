@@ -539,6 +539,27 @@ class RemediationAction(BaseModel):
     detail: str | None = None
 
 
+class RemediationCandidate(BaseModel):
+    document_id: str
+    filename: str
+    course_id: str
+    course_title: str | None = None
+    status: Literal["processing"] = "processing"
+    next_status: Literal["failed"] = "failed"
+    idle_minutes: int
+    previous_stage: str | None = None
+    next_stage: str | None = None
+    progress_current: int = 0
+    progress_total: int = 0
+    next_progress_current: int = 0
+    next_progress_total: int = 0
+    next_error_message: str
+
+
+class RemediationRequest(BaseModel):
+    document_ids: list[str] | None = Field(default=None, min_length=1, max_length=200)
+
+
 class RemediationChange(ORMModel):
     id: int
     action: str
@@ -569,6 +590,7 @@ class RemediationResponse(BaseModel):
     document_id: str | None = None
     stale_after_minutes: int = 60
     actions: list[RemediationAction] = Field(default_factory=list)
+    candidates: list[RemediationCandidate] = Field(default_factory=list)
     remaining_issues: list[str] = Field(default_factory=list)
     changes: list[RemediationChange] = Field(default_factory=list)
 

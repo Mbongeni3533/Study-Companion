@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -27,7 +27,9 @@ from ..schemas import (
     DocumentRetryResponse,
     ExecutiveReportResponse,
     RemediationAction,
+    RemediationCandidate,
     RemediationChange,
+    RemediationRequest,
     RemediationResponse,
 )
 from .admin import _require_admin
@@ -81,6 +83,7 @@ async def sysadmin_diagnostics(
 
 @router.post("/sysadmin/remediate", response_model=RemediationResponse)
 def sysadmin_remediate_endpoint(
+    payload: RemediationRequest | None = Body(default=None),
     dry_run: bool = Query(
         default=True,
         description="Preview stale-document changes without applying them.",
@@ -93,6 +96,11 @@ def sysadmin_remediate_endpoint(
     db: Session = Depends(get_db),
     _: None = Depends(_require_admin),
 ) -> RemediationResponse:
+    if document_id and payload and payload.document_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Choose either one document or a selected list, not both.",
+        )
     if document_id:
         document = db.get(Document, document_id)
         if document is None:
@@ -102,8 +110,9 @@ def sysadmin_remediate_endpoint(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="That document is no longer processing.",
             )
-    actions, remaining, changes = sysadmin_remediate(
-        db, dry_run=dry_run, document_id=document_id
+    selected_ids = payload.document_ids if payload and payload.document_ids else None
+    actions, remaining, changes, candidates = sysadmin_remediate(
+        db, dry_run=dry_run, document_id=document_id, document_ids=selected_ids
     )
     return RemediationResponse(
         generated_at=datetime.now(timezone.utc),
@@ -111,6 +120,7 @@ def sysadmin_remediate_endpoint(
         document_id=document_id,
         stale_after_minutes=get_settings().stale_processing_minutes,
         actions=[RemediationAction(**a) for a in actions],
+        candidates=[RemediationCandidate(**candidate) for candidate in candidates],
         remaining_issues=remaining,
         changes=[RemediationChange.model_validate(change) for change in changes],
     )
