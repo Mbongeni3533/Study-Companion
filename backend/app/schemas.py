@@ -497,6 +497,15 @@ class DiagnosticFinding(BaseModel):
     suggested_action: str | None = None
 
 
+class DocumentAlertTracking(BaseModel):
+    status: Literal["open", "acknowledged", "snoozed", "resolved"] = "open"
+    note: str | None = None
+    acknowledged_at: datetime | None = None
+    snoozed_until: datetime | None = None
+    resolved_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class DocumentAlert(BaseModel):
     document_id: str
     filename: str
@@ -507,6 +516,13 @@ class DocumentAlert(BaseModel):
     stale: bool = False
     error: str | None = None
     action: Literal["manual_review", "run_remediation"] = "manual_review"
+    tracking: DocumentAlertTracking = Field(default_factory=DocumentAlertTracking)
+
+
+class DocumentAlertActionRequest(BaseModel):
+    action: Literal["acknowledge", "snooze", "resolve", "reopen"] | None = None
+    note: str | None = Field(default=None, max_length=4000)
+    snooze_minutes: int | None = Field(default=None, ge=5, le=10080)
 
 
 class DiagnosticsResponse(BaseModel):

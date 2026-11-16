@@ -62,6 +62,8 @@
   }
 
   let lastDiagnosticsAt = null;
+  let lastHealthAlerts = [];
+  let showTrackedAlerts = false;
 
   function showHealthStatus(message, ok = true) {
     const node = $("#health-status");
@@ -102,8 +104,21 @@
     $("#health-banner-issues").textContent = issues;
   }
 
+  function alertIsActive(alert) {
+    const status = alert && alert.tracking ? alert.tracking.status : "open";
+    return status !== "snoozed" && status !== "resolved";
+  }
+
+  function trackingLabel(status) {
+    if (status === "acknowledged") return "Acknowledged";
+    if (status === "snoozed") return "Snoozed";
+    if (status === "resolved") return "Resolved";
+    return "Open";
+  }
+
   function renderHealthBanner(data) {
-    const alerts = Array.isArray(data.alerts) ? data.alerts : [];
+    const allAlerts = Array.isArray(data.alerts) ? data.alerts : [];
+    const alerts = allAlerts.filter(alertIsActive);
     const findings = Array.isArray(data.findings) ? data.findings : [];
     const failed = alerts.filter((alert) => alert.status === "failed").length;
     const stale = alerts.filter((alert) => alert.stale).length;
@@ -130,6 +145,7 @@
   }
 
   function renderHealthAlerts(alerts) {
+    lastHealthAlerts = alerts;
     const host = $("#health-alerts");
     if (!alerts.length) {
       host.hidden = true;
@@ -137,32 +153,62 @@
       $("#health-bulk-actions").hidden = true;
       return;
     }
-    const failed = alerts.filter((alert) => alert.status === "failed").length;
-    const stale = alerts.filter((alert) => alert.stale).length;
+    const activeAlerts = alerts.filter(alertIsActive);
+    const trackedAlerts = alerts.filter((alert) => !alertIsActive(alert));
+    const visibleAlerts = showTrackedAlerts ? alerts : activeAlerts;
+    const failed = activeAlerts.filter((alert) => alert.status === "failed").length;
+    const stale = activeAlerts.filter((alert) => alert.stale).length;
     const summary = [failed ? `${failed} failed` : "", stale ? `${stale} stuck` : ""].filter(Boolean).join(" · ");
     host.hidden = false;
     $("#health-bulk-actions").hidden = stale === 0;
+
+    const toggle = trackedAlerts.length
+      ? `<button class="btn btn-ghost btn-sm" type="button" data-health-toggle-tracked>${showTrackedAlerts ? "Hide" : "Show"} ${trackedAlerts.length} snoozed/resolved</button>`
+      : "";
+    const empty = visibleAlerts.length
+      ? ""
+      : `<div class="health-alert-empty">No active document alerts.${trackedAlerts.length ? " Use the toggle to review snoozed or resolved alerts." : ""}</div>`;
+
     host.innerHTML = `
       <div class="health-alerts-head">
         <strong>Attention required</strong>
-        <span>${esc(summary)}</span>
+        <span>${esc(summary || "No active issues")}</span>
+        ${toggle}
       </div>
-      <div class="health-alert-list">${alerts
+      ${empty}
+      <div class="health-alert-list">${visibleAlerts
         .map((alert) => {
           const isStale = alert.stale || alert.action === "run_remediation";
-          const meta = [alert.course_title, alert.age_minutes != null ? `No progress for ${alert.age_minutes} min` : ""]
+          const active = alertIsActive(alert);
+          const tracking = alert.tracking || {};
+          const trackingStatus = ["acknowledged", "snoozed", "resolved"].includes(tracking.status) ? tracking.status : "open";
+          const trackingMeta = trackingStatus === "snoozed" && tracking.snoozed_until ? `Snoozed until ${fmtDate(tracking.snoozed_until)}` : "";
+          const meta = [alert.course_title, alert.age_minutes != null ? `No progress for ${alert.age_minutes} min` : "", trackingMeta]
             .filter(Boolean)
             .join(" · ");
           const detail = isStale
             ? "This document has not progressed within the stale-processing limit. Preview the fix before applying it."
             : alert.error || "This document failed processing and needs manual review.";
+          const trackingBadge = trackingStatus === "open"
+            ? ""
+            : `<span class="health-alert-tracking health-alert-tracking--${trackingStatus}">${esc(trackingLabel(trackingStatus))}</span>`;
+          const note = tracking.note || "";
+          const canSnooze = trackingStatus !== "snoozed" && trackingStatus !== "resolved";
+          const trackingActions = [
+            trackingStatus === "open" ? `<button class="btn btn-ghost btn-sm" type="button" data-alert-action="acknowledge" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Acknowledge</button>` : "",
+            canSnooze ? `<select class="health-alert-snooze" data-alert-snooze aria-label="Snooze duration"><option value="60">1 hour</option><option value="1440">24 hours</option><option value="10080">7 days</option></select><button class="btn btn-ghost btn-sm" type="button" data-alert-action="snooze" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Snooze</button>` : "",
+            trackingStatus !== "resolved" ? `<button class="btn btn-ghost btn-sm" type="button" data-alert-action="resolve" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Resolve</button>` : "",
+            trackingStatus !== "open" ? `<button class="btn btn-ghost btn-sm" type="button" data-alert-action="reopen" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Reopen</button>` : "",
+          ].filter(Boolean).join("");
           return `
-            <article class="health-alert ${isStale ? "health-alert--stale" : ""}">
+            <article class="health-alert ${isStale ? "health-alert--stale" : ""} ${active ? "" : "health-alert--tracked"}">
               <span class="health-alert-status">${isStale ? "Stuck" : "Failed"}</span>
               <div class="health-alert-body">
                 <strong>${esc(alert.filename || "Untitled document")}</strong>
+                ${trackingBadge}
                 ${meta ? `<span class="health-alert-meta">${esc(meta)}</span>` : ""}
                 <p>${esc(detail)}</p>
+                ${note ? `<p class="health-alert-internal-note">${esc(note)}</p>` : ""}
                 ${isStale ? `<div class="health-alert-actions">
                   <button class="btn btn-ghost btn-sm" type="button" data-health-action="preview" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Preview this fix</button>
                   <button class="btn btn-ghost btn-sm admin-danger" type="button" data-health-action="apply" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Mark this failed</button>
@@ -171,6 +217,14 @@
                   <button class="btn btn-ghost btn-sm admin-danger" type="button" data-health-action="delete" data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Delete document</button>
                   <span class="health-alert-note">Or leave for manual review</span>
                 </div>`}
+                <div class="health-alert-tracking-actions">${trackingActions}</div>
+                <details class="health-alert-note-box">
+                  <summary>${note ? "Edit internal note" : "Add internal note"}</summary>
+                  <textarea data-alert-note maxlength="4000" placeholder="Context for the next admin (not shown to students)">${esc(note)}</textarea>
+                  <div class="health-alert-note-actions">
+                    <button class="btn btn-ghost btn-sm" type="button" data-alert-note-save data-document-id="${esc(alert.document_id)}" data-document-name="${esc(alert.filename || "document")}">Save note</button>
+                  </div>
+                </details>
               </div>
             </article>`;
         })
@@ -278,6 +332,41 @@
           )
           .join("")}</ul>
       </div>` : ""}`;
+  }
+
+  async function updateDocumentAlert({ documentId, action = null, note = null, snoozeMinutes = null, button, successMessage }) {
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = action ? "Updating..." : "Saving...";
+    const payload = {};
+    if (action) payload.action = action;
+    if (note !== null) payload.note = note;
+    if (snoozeMinutes != null) payload.snooze_minutes = snoozeMinutes;
+    showHealthStatus(action ? "Updating alert tracking…" : "Saving internal note…");
+    try {
+      const response = await fetch(`/admin/agents/sysadmin/documents/${encodeURIComponent(documentId)}/alert`, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (response.status === 403) {
+        showLogin("Admin session expired. Enter the admin key again.");
+        return;
+      }
+      const data = await response.json().catch(() => null);
+      if (response.status === 404 || response.status === 409) {
+        await loadSystemHealth();
+      }
+      if (!response.ok) throw new Error((data && data.detail) || `Request failed (${response.status})`);
+      await loadSystemHealth();
+      showHealthStatus(successMessage || "Alert updated.");
+    } catch (error) {
+      showHealthStatus(error.message || "Could not update the alert.", false);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
   }
 
   async function retryDocument({ documentId, documentName, button }) {
@@ -831,6 +920,53 @@
     runRemediationScan({ dryRun: false, button: event.currentTarget });
   });
   $("#health-alerts").addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-health-toggle-tracked]");
+    if (toggle) {
+      showTrackedAlerts = !showTrackedAlerts;
+      renderHealthAlerts(lastHealthAlerts);
+      return;
+    }
+
+    const trackingButton = event.target.closest("[data-alert-action]");
+    if (trackingButton) {
+      const action = trackingButton.dataset.alertAction;
+      const documentId = trackingButton.dataset.documentId;
+      const name = trackingButton.dataset.documentName || "this document";
+      const card = trackingButton.closest(".health-alert");
+      if (!documentId || !card) return;
+      let successMessage = "Alert updated.";
+      let snoozeMinutes = null;
+      if (action === "acknowledge") successMessage = "Alert acknowledged.";
+      if (action === "reopen") successMessage = "Alert reopened.";
+      if (action === "resolve") {
+        if (!window.confirm(`Mark the alert for "${name}" as resolved? This closes only the alert; the document status is unchanged.`)) return;
+        successMessage = "Alert resolved. The document status was not changed.";
+      }
+      if (action === "snooze") {
+        const select = card.querySelector("[data-alert-snooze]");
+        snoozeMinutes = Number(select && select.value);
+        if (!Number.isFinite(snoozeMinutes) || snoozeMinutes < 5) return;
+        successMessage = `Alert snoozed for ${select.options[select.selectedIndex].text}.`;
+      }
+      updateDocumentAlert({ documentId, action, snoozeMinutes, button: trackingButton, successMessage });
+      return;
+    }
+
+    const noteButton = event.target.closest("[data-alert-note-save]");
+    if (noteButton) {
+      const card = noteButton.closest(".health-alert");
+      const textarea = card && card.querySelector("[data-alert-note]");
+      const documentId = noteButton.dataset.documentId;
+      if (!documentId || !textarea) return;
+      updateDocumentAlert({
+        documentId,
+        note: textarea.value,
+        button: noteButton,
+        successMessage: textarea.value.trim() ? "Internal note saved." : "Internal note cleared.",
+      });
+      return;
+    }
+
     const button = event.target.closest("[data-health-action]");
     if (!button) return;
     const action = button.dataset.healthAction;

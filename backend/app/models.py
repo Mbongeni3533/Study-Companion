@@ -109,6 +109,24 @@ class RemediationEvent(Base):
     )
 
 
+class DocumentAlertState(TimestampMixin, Base):
+    """Operator tracking for a document alert (failed or stale processing)."""
+
+    __tablename__ = "document_alert_states"
+
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), primary_key=True
+    )
+    # open | acknowledged | snoozed | resolved
+    status: Mapped[str] = mapped_column(String(20), default="open", nullable=False, index=True)
+    # failed | stale. A kind change reopens the alert on the next diagnostic.
+    fingerprint: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    snoozed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AdminNotificationState(Base):
     """Deduplication state for operational admin alerts.
 

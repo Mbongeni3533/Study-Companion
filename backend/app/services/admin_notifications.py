@@ -63,6 +63,8 @@ def collect_operational_issues(db: Session, settings: Settings) -> list[dict[str
     issues: list[dict[str, str]] = []
 
     for alert in collect_document_alerts(db):
+        if alert.get("tracking", {}).get("status") in {"snoozed", "resolved"}:
+            continue
         course = alert.get("course_title") or "Unknown course"
         filename = alert.get("filename") or "Untitled document"
         if alert.get("status") == "failed":

@@ -18,6 +18,7 @@ from ..models import (
     Chunk,
     Course,
     Document,
+    DocumentAlertState,
     Feedback,
     InviteCode,
     RemediationEvent,
@@ -119,6 +120,32 @@ async def ceo_report(db: Session) -> tuple[str, dict[str, Any], bool]:
     return text, metrics, ai_used
 
 
+def _alert_tracking(
+    state: DocumentAlertState | None, kind: str, now: datetime
+) -> dict[str, Any]:
+    """Return the effective operator-tracking status for an alert."""
+    if state is None or state.fingerprint != kind:
+        return {
+            "status": "open",
+            "note": state.note if state else None,
+            "updated_at": state.updated_at if state else None,
+        }
+
+    status = state.status if state.status in {"open", "acknowledged", "snoozed", "resolved"} else "open"
+    if status == "snoozed":
+        until = as_utc(state.snoozed_until)
+        if until is None or until <= now:
+            status = "open"
+    return {
+        "status": status,
+        "note": state.note,
+        "acknowledged_at": state.acknowledged_at if status == "acknowledged" else None,
+        "snoozed_until": state.snoozed_until if status == "snoozed" else None,
+        "resolved_at": state.resolved_at if status == "resolved" else None,
+        "updated_at": state.updated_at,
+    }
+
+
 def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
     """Return failed documents and processing documents past the stale limit."""
     settings = get_settings()
@@ -129,6 +156,10 @@ def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
             select(Document).where(Document.status.in_(["failed", "processing"]))
         ).all()
     )
+    states = {
+        state.document_id: state
+        for state in db.scalars(select(DocumentAlertState)).all()
+    }
     alerts: list[dict[str, Any]] = []
     for document in documents:
         course = document.course
@@ -138,6 +169,7 @@ def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
             "course_id": course.id if course else document.course_id,
             "course_title": course.title if course else None,
         }
+        state = states.get(document.id)
         if document.status == "failed":
             alerts.append(
                 {
@@ -147,6 +179,7 @@ def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
                     "stale": False,
                     "error": document.error_message or "No error message was recorded.",
                     "action": "manual_review",
+                    "tracking": _alert_tracking(state, "failed", now),
                 }
             )
             continue
@@ -164,6 +197,7 @@ def collect_document_alerts(db: Session) -> list[dict[str, Any]]:
                     "stale": True,
                     "error": None,
                     "action": "run_remediation",
+                    "tracking": _alert_tracking(state, "stale", now),
                 }
             )
     return sorted(
@@ -177,8 +211,13 @@ async def sysadmin_diagnose(
 ) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]], bool]:
     metrics = collect_metrics(db)
     alerts = collect_document_alerts(db)
-    failed_alerts = [alert for alert in alerts if alert["status"] == "failed"]
-    stale_alerts = [alert for alert in alerts if alert["stale"]]
+    active_alerts = [
+        alert
+        for alert in alerts
+        if alert["tracking"]["status"] not in {"snoozed", "resolved"}
+    ]
+    failed_alerts = [alert for alert in active_alerts if alert["status"] == "failed"]
+    stale_alerts = [alert for alert in active_alerts if alert["stale"]]
     findings: list[dict[str, Any]] = []
     if failed_alerts:
         findings.append(
@@ -230,7 +269,7 @@ async def sysadmin_diagnose(
     prompt = (
         "You are a system administrator for Study Companion. Review these diagnostics, metrics and "
         "document alerts, then give a short remediation plan. Do not invent data.\n\n"
-        f"Findings: {findings}\nMetrics: {metrics}\nAlerts: {alerts}"
+        f"Findings: {findings}\nMetrics: {metrics}\nAlerts: {active_alerts}"
     )
     ai_text = await _llm("You are a careful SRE. Be concise and actionable.", prompt)
     if ai_text:
@@ -258,7 +297,8 @@ def sysadmin_remediate(
     """
     settings = get_settings()
     limit = max(1, int(settings.stale_processing_minutes))
-    cutoff = _now() - timedelta(minutes=limit)
+    now = _now()
+    cutoff = now - timedelta(minutes=limit)
     actions: list[dict[str, Any]] = []
     remaining: list[str] = []
     changes: list[RemediationEvent] = []
@@ -268,14 +308,28 @@ def sysadmin_remediate(
         processing_query = processing_query.where(Document.id == document_id)
     processing = list(db.scalars(processing_query).all())
     prior_failed = list(db.scalars(select(Document).where(Document.status == "failed")).all())
+    alert_states = {
+        state.document_id: state
+        for state in db.scalars(select(DocumentAlertState)).all()
+    }
     stale: list[tuple[Document, int]] = []
     active = 0
+    suppressed = 0
     for document in processing:
         last_activity = as_utc(document.updated_at or document.created_at)
         if last_activity is None or last_activity > cutoff:
             active += 1
             continue
-        age_minutes = max(0, int((_now() - last_activity).total_seconds() // 60))
+        state = alert_states.get(document.id)
+        if state is not None and state.fingerprint == "stale":
+            if state.status == "resolved":
+                suppressed += 1
+                continue
+            until = as_utc(state.snoozed_until)
+            if state.status == "snoozed" and until is not None and until > now:
+                suppressed += 1
+                continue
+        age_minutes = max(0, int((now - last_activity).total_seconds() // 60))
         stale.append((document, age_minutes))
 
     if stale:
@@ -331,6 +385,18 @@ def sysadmin_remediate(
                 "action": "document_processing_check",
                 "affected": 0,
                 "detail": f"No processing documents older than {limit} minutes.",
+            }
+        )
+
+    if suppressed:
+        actions.append(
+            {
+                "action": "tracking_filter",
+                "affected": suppressed,
+                "detail": (
+                    f"Skipped {suppressed} stale document(s) marked snoozed or resolved "
+                    "in the alert tracker."
+                ),
             }
         )
 
